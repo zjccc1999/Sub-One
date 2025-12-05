@@ -560,22 +560,29 @@ export class SubscriptionParser {
     let processedLine = line;
     if (processedLine.startsWith('ss://')) {
       try {
-        const ssPart = processedLine.split('://')[1];
-        const hashIndex = ssPart.indexOf('#');
-        const base64Part = hashIndex !== -1 ? ssPart.substring(0, hashIndex) : ssPart;
-        const decoded = this.decodeBase64(base64Part);
+        // 获取ss://后面的部分
+        const ssContent = processedLine.slice('ss://'.length);
         
-        // 检查解码后的内容是否包含其他协议
-        if (decoded.startsWith('anytls://') || decoded.startsWith('vless://') || decoded.startsWith('vmess://') || decoded.startsWith('trojan://')) {
+        // 分离节点URL和名称
+        const hashIndex = ssContent.indexOf('#');
+        const base64Part = hashIndex !== -1 ? ssContent.slice(0, hashIndex) : ssContent;
+        const nodeNamePart = hashIndex !== -1 ? ssContent.slice(hashIndex) : '';
+        
+        // 清理base64内容（移除空格）
+        const cleanedBase64 = base64Part.replace(/\s/g, '');
+        
+        // 解码base64内容
+        let decodedUrl = this.decodeBase64(cleanedBase64);
+        
+        // 检查解码后的内容是否是其他协议的节点
+        if (decodedUrl.startsWith('anytls://') || decodedUrl.startsWith('vless://') || 
+            decodedUrl.startsWith('vmess://') || decodedUrl.startsWith('trojan://')) {
           // 这是一个错误包装的节点，使用解码后的原始内容
-          processedLine = decoded;
-          // 如果有名称，重新添加到URL中
-          if (hashIndex !== -1) {
-            processedLine += ssPart.substring(hashIndex);
-          }
+          processedLine = decodedUrl + nodeNamePart;
         }
-      } catch (e) {
+      } catch (error) {
         // 解码失败，继续使用原始行
+        console.warn('Failed to process wrapped node:', error);
       }
     }
 

@@ -578,7 +578,7 @@ async function handleApiRequest(request: Request, env: Env) {
 
             try {
                 const response = await fetch(new Request(externalUrl, {
-                    headers: { 'User-Agent': 'Sub-One-Proxy/1.0' }, // Identify as proxy
+                    headers: { 'User-Agent': 'Clash for Windows/0.20.39' }, // Use a standard client UA
                     redirect: "follow",
                     cf: { insecureSkipVerify: true } // Allow insecure SSL for flexibility
                 } as any));

@@ -59,8 +59,16 @@ const importSubscription = async () => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      let errorMsg = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorMsg;
+      } catch (e) {
+        // 如果无法解析 JSON，尝试获取文本内容
+        const text = await response.text();
+        if (text) errorMsg = text;
+      }
+      throw new Error(errorMsg);
     }
     const content = await response.text();
     const newNodes = parseNodes(content);

@@ -743,18 +743,34 @@ const handleSaveSortChanges = async () => {
   }
 };
 
-// 导出订阅链接功能
+// 导出节点功能
 const handleExportNodes = async () => {
-  const token = config.value?.mytoken;
-  if (!token || !token.trim()) {
-    showToast('请先在设置中配置"默认订阅Token"', 'error');
+  // 优先尝试使用手动节点订阅Token导出链接
+  const token = config.value?.manualNodeToken;
+  if (token && token.trim()) {
+    const url = `${window.location.origin}/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('手动节点订阅链接已复制到剪贴板', 'success');
+    } catch (error) {
+      console.error('复制失败:', error);
+      showToast('复制失败，请重试', 'error');
+    }
+    return;
+  }
+
+  // 如果未配置Token，则导出Base64内容
+  const enabledNodes = manualNodes.value.filter(n => n.enabled && n.url);
+  if (enabledNodes.length === 0) {
+    showToast('没有可导出的启用节点', 'warning');
     return;
   }
 
   try {
-    const url = `${window.location.origin}/${token}`;
-    await navigator.clipboard.writeText(url);
-    showToast('标准订阅链接已复制到剪贴板', 'success');
+    const urls = enabledNodes.map(n => n.url).join('\n');
+    const base64 = btoa(urls);
+    await navigator.clipboard.writeText(base64);
+    showToast(`已导出 ${enabledNodes.length} 个节点内容(Base64)。如需导出订阅链接，请在设置中配置"手动节点订阅Token"`, 'success');
   } catch (error) {
     console.error('导出失败:', error);
     showToast('导出失败，请重试', 'error');

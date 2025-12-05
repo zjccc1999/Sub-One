@@ -72,6 +72,7 @@ async function conditionalKVPut(env: Env, key: string, newData: any, oldData: an
 const defaultSettings = {
     FileName: 'Sub-One',
     mytoken: 'auto',
+    manualNodeToken: '', // 默认为空
     profileToken: '',  // 默认为空，用户需主动设置
     subConverter: 'sub.xeton.dev',  // 更可靠的后端，支持 Reality
     subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
@@ -1620,10 +1621,14 @@ async function handleSubRequest(context: EventContext<Env, any, any>) {
             return new Response('Profile not found or disabled', { status: 404 });
         }
     } else {
-        if (!token || token !== config.mytoken) {
+        if (token === config.mytoken) {
+            targetSubs = allSubs.filter(s => s.enabled);
+        } else if (config.manualNodeToken && token === config.manualNodeToken) {
+            // 仅返回手动节点
+            targetSubs = allSubs.filter(s => s.enabled && !s.url.toLowerCase().startsWith('http'));
+        } else {
             return new Response('Invalid Token', { status: 403 });
         }
-        targetSubs = allSubs.filter(s => s.enabled);
         effectiveSubConverter = config.subConverter;
         effectiveSubConfig = config.subConfig;
     }

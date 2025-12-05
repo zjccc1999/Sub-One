@@ -24,6 +24,7 @@ const defaultSettings: AppConfig = {
   subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
   prependSubName: true,
   mytoken: 'auto',
+  manualNodeToken: '', // 默认为空
   profileToken: '', // 默认为空，用户需主动设置
   BotToken: '',
   ChatID: ''
@@ -36,6 +37,7 @@ const hasWhitespace = computed(() => {
   const fieldsToCkeck: (keyof AppConfig)[] = [
     'FileName',
     'mytoken',
+    'manualNodeToken',
     'profileToken',
     'subConverter',
     'subConfig',
@@ -157,6 +159,12 @@ watch(() => props.show, (newValue) => {
                 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">自定义订阅Token</label>
               <input type="text" id="myToken" v-model="settings.mytoken" class="input-modern-enhanced w-full"
                 placeholder="用于访问订阅链接的Token">
+            </div>
+            <div class="group">
+              <label for="manualNodeToken"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">手动节点订阅Token</label>
+              <input type="text" id="manualNodeToken" v-model="settings.manualNodeToken"
+                class="input-modern-enhanced w-full" placeholder="用于仅导出手动节点的Token">
             </div>
           </div>
         </section>

@@ -236,7 +236,10 @@ export class SubscriptionParser {
       tls: proxy.tls ? "tls" : "",
       sni: proxy.servername || proxy.sni || "",
       alpn: proxy.alpn ? proxy.alpn.join(',') : "",
-      fp: proxy.fingerprint || ""
+      fp: proxy.fingerprint || "",
+      // Add missing fields
+      serviceName: proxy['grpc-opts']?.['grpc-service-name'] || "",
+      mode: proxy['grpc-opts']?.mode || "gun"
     };
     return `vmess://${this.safeBtoa(JSON.stringify(config))}`;
   }
@@ -252,10 +255,12 @@ export class SubscriptionParser {
       if (proxy.servername) params.set('sni', proxy.servername);
       if (proxy.fingerprint) params.set('fp', proxy.fingerprint);
       if (proxy.alpn) params.set('alpn', proxy.alpn.join(','));
+      if (proxy.skip_cert_verify) params.set('allowInsecure', '1');
       if (proxy['reality-opts']) {
         params.set('security', 'reality');
         params.set('pbk', proxy['reality-opts']['public-key']);
         params.set('sid', proxy['reality-opts']['short-id']);
+        if (proxy['reality-opts']['spider-x']) params.set('spx', proxy['reality-opts']['spider-x']);
       }
     }
     if (proxy.flow) params.set('flow', proxy.flow);
@@ -265,6 +270,7 @@ export class SubscriptionParser {
     }
     if (proxy.network === 'grpc') {
       if (proxy['grpc-opts']?.['grpc-service-name']) params.set('serviceName', proxy['grpc-opts']['grpc-service-name']);
+      if (proxy['grpc-opts']?.mode) params.set('mode', proxy['grpc-opts'].mode);
     }
 
     url += `?${params.toString()}#${encodeURIComponent(proxy.name)}`;
@@ -305,6 +311,8 @@ export class SubscriptionParser {
     if (proxy.sni) params.set('sni', proxy.sni);
     if (proxy.alpn) params.set('alpn', proxy.alpn.join(','));
     if (proxy.obfs) params.set('obfs', proxy.obfs);
+    if (proxy.skip_cert_verify) params.set('insecure', '1');
+    if (proxy.fast_open) params.set('fastOpen', '1');
 
     url += `?${params.toString()}#${encodeURIComponent(proxy.name)}`;
     return url;
@@ -320,6 +328,7 @@ export class SubscriptionParser {
       params.set('obfs', proxy.obfs);
       if (proxy['obfs-password']) params.set('obfs-password', proxy['obfs-password']);
     }
+    if (proxy.skip_cert_verify) params.set('insecure', '1');
 
     url += `?${params.toString()}#${encodeURIComponent(proxy.name)}`;
     return url;
@@ -334,6 +343,9 @@ export class SubscriptionParser {
     if (proxy.alpn) params.set('alpn', proxy.alpn.join(','));
     if (proxy.congestion_control) params.set('congestion_control', proxy.congestion_control);
     if (proxy.udp_relay_mode) params.set('udp_relay_mode', proxy.udp_relay_mode);
+    if (proxy.skip_cert_verify) params.set('allow_insecure', '1');
+    if (proxy.fast_open) params.set('fast_open', '1');
+    if (proxy.disable_sni) params.set('disable_sni', '1');
 
     url += `?${params.toString()}#${encodeURIComponent(proxy.name)}`;
     return url;
@@ -349,14 +361,21 @@ export class SubscriptionParser {
   }
 
   buildAnytlsUrl(proxy: any): string {
-    // anytls://uuid:password@host:port?params#name
-    let url = `anytls://${proxy.uuid || ''}:${proxy.password || ''}@${proxy.server}:${proxy.port}`;
+    // anytls://uuid@host:port?params#name
+    // Standard: anytls://uuid@host:port?security=tls&sni=...&type=tcp...
+    let url = `anytls://${proxy.uuid || ''}@${proxy.server}:${proxy.port}`;
     const params = new URLSearchParams();
+
+    // Default params based on user example
+    params.set('security', proxy.tls ? 'tls' : 'none');
+    params.set('type', proxy.network || 'tcp');
 
     if (proxy.sni) params.set('sni', proxy.sni);
     if (proxy.alpn) params.set('alpn', proxy.alpn.join(','));
     if (proxy.fingerprint) params.set('fp', proxy.fingerprint);
     if (proxy.client) params.set('client', proxy.client);
+    if (proxy.skip_cert_verify) params.set('allowInsecure', '1');
+    if (proxy.flow) params.set('flow', proxy.flow);
 
     url += `?${params.toString()}#${encodeURIComponent(proxy.name)}`;
     return url;
@@ -450,6 +469,16 @@ export class SubscriptionParser {
             }
           }
           return 'SSR节点';
+        }
+        case 'anytls': {
+          // anytls://uuid@host:port?params#name
+          try {
+            const u = new URL(url);
+            if (u.hash) return decodeURIComponent(u.hash.substring(1));
+            return u.hostname || 'AnyTLS节点';
+          } catch {
+            return 'AnyTLS节点';
+          }
         }
         // 其他协议通常在 hash 中，如果 hash 不存在，则使用 host
         default: {

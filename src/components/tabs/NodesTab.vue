@@ -30,7 +30,6 @@ const emit = defineEmits<{
   (e: 'delete-node', id: string): void;
   (e: 'change-page', page: number): void;
   (e: 'batch-delete-nodes', ids: string[]): void;
-  (e: 'create-profile-from-nodes', ids: string[]): void;
 }>();
 
 const showNodesMoreMenu = ref(false);
@@ -204,65 +203,49 @@ const handleDragEnd = (evt: any) => {
 
     <!-- 批量操作工具栏 -->
     <Transition name="slide-fade">
-      <div v-if="isBatchDeleteMode" class="mb-6 flex flex-col gap-4">
-        <!-- 批量删除模式控制栏 -->
-        <div
-          class="p-4 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 shadow-lg">
-          <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                <path fill-rule="evenodd"
-                  d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"
-                  clip-rule="evenodd" />
-              </svg>
-              批量删除模式
-              <span v-if="selectedCount > 0"
-                class="ml-2 px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-bold shadow-md">
-                已选 {{ selectedCount }}
-              </span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <button @click="selectAll"
-                class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
-                全选
-              </button>
-              <button @click="invertSelection"
-                class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
-                反选
-              </button>
-              <button @click="deselectAll"
-                class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
-                清空选择
-              </button>
-              <button @click="deleteSelected" :disabled="selectedCount === 0"
-                class="btn-modern-enhanced btn-danger text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd"
-                    d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                    clip-rule="evenodd" />
-                </svg>
-                删除选中 ({{ selectedCount }})
-              </button>
-              <button @click="toggleBatchDeleteMode"
-                class="btn-modern-enhanced btn-cancel text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 生成订阅按钮（仅在有选择时显示） -->
-        <div v-if="selectedCount > 0" class="flex justify-end">
-          <button @click="$emit('create-profile-from-nodes', Array.from(selectedNodeIds))"
-            class="btn-modern-enhanced btn-primary text-sm font-semibold px-6 py-2.5 transform hover:scale-105 transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl ring-2 ring-indigo-500/20">
+      <div v-if="isBatchDeleteMode"
+        class="mb-6 p-4 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 shadow-lg">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
               <path fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"
                 clip-rule="evenodd" />
             </svg>
-            将选中的 {{ selectedCount }} 个节点生成订阅
-          </button>
+            批量删除模式
+            <span v-if="selectedCount > 0"
+              class="ml-2 px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-bold shadow-md">
+              已选 {{ selectedCount }}
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button @click="selectAll"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              全选
+            </button>
+            <button @click="invertSelection"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              反选
+            </button>
+            <button @click="deselectAll"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              清空选择
+            </button>
+            <button @click="deleteSelected" :disabled="selectedCount === 0"
+              class="btn-modern-enhanced btn-danger text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd"
+                  d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                  clip-rule="evenodd" />
+              </svg>
+              删除选中 ({{ selectedCount }})
+            </button>
+            <button @click="toggleBatchDeleteMode"
+              class="btn-modern-enhanced btn-cancel text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              取消
+            </button>
+          </div>
         </div>
       </div>
     </Transition>

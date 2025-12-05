@@ -301,7 +301,7 @@ onMounted(() => {
                 d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" />
             </svg>
           </div>
-          <span class="text-gray-500 dark:text-gray-400 font-medium">节点池</span>
+          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">节点池</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ totalNodeCount }}</h4>
@@ -325,7 +325,7 @@ onMounted(() => {
                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
-          <span class="text-gray-500 dark:text-gray-400 font-medium">订阅组</span>
+          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">订阅组</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ profiles.length }}</h4>
@@ -348,7 +348,7 @@ onMounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span class="text-gray-500 dark:text-gray-400 font-medium">手动节点</span>
+          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">手动节点</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ manualNodes.length }}</h4>

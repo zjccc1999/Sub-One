@@ -363,6 +363,7 @@ async function handleApiRequest(request: Request, env: Env) {
                 const config = {
                     FileName: settings.FileName || 'SUB_ONE',
                     mytoken: settings.mytoken || 'auto',
+                    manualNodeToken: settings.manualNodeToken || '', // 默认为空
                     profileToken: settings.profileToken || ''  // 默认为空
                 };
                 return new Response(JSON.stringify({ subs, profiles, config }), { headers: { 'Content-Type': 'application/json' } });

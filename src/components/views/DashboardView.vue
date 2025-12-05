@@ -979,17 +979,9 @@ const handleNodeDragEnd = async () => {
     </template>
   </Modal>
 
-  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="async (val) => {
+  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="(val) => {
     if (!val) {
-      try {
-        const { fetchSettings } = await import('../../lib/api');
-        const newConfig = await fetchSettings();
-        if (newConfig) {
-          config.value = newConfig;
-        }
-      } catch (e) {
-        console.error('Failed to reload config:', e);
-      }
+      window.location.reload();
     }
   }" />
   <SubscriptionImportModal :show="showSubscriptionImportModal" @update:show="showSubscriptionImportModal = $event"

@@ -743,19 +743,18 @@ const handleSaveSortChanges = async () => {
   }
 };
 
-// 导出节点功能
+// 导出订阅链接功能
 const handleExportNodes = async () => {
-  const enabledNodes = manualNodes.value.filter(n => n.enabled && n.url);
-  if (enabledNodes.length === 0) {
-    showToast('没有可导出的启用节点', 'warning');
+  const token = config.value?.mytoken;
+  if (!token || token === 'auto' || !token.trim()) {
+    showToast('请先在设置中配置"默认订阅Token"', 'error');
     return;
   }
 
   try {
-    const urls = enabledNodes.map(n => n.url).join('\n');
-    const base64 = btoa(urls);
-    await navigator.clipboard.writeText(base64);
-    showToast(`已导出 ${enabledNodes.length} 个节点到剪贴板`, 'success');
+    const url = `${window.location.origin}/${token}`;
+    await navigator.clipboard.writeText(url);
+    showToast('标准订阅链接已复制到剪贴板', 'success');
   } catch (error) {
     console.error('导出失败:', error);
     showToast('导出失败，请重试', 'error');

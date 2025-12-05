@@ -48,29 +48,12 @@ export class SubscriptionParser {
    */
   decodeBase64(str: string) {
     try {
-      // 预处理：清理和规范化 Base64 字符串
-      let cleanedStr = str.trim();
-      
-      // 替换 URL 安全字符为标准 Base64 字符
-      cleanedStr = cleanedStr.replace(/-/g, '+').replace(/_/g, '/');
-      
-      // 处理缺少填充字符的情况
-      const padding = cleanedStr.length % 4;
-      if (padding !== 0) {
-        cleanedStr += '='.repeat(4 - padding);
-      }
-      
-      // 移除所有非 Base64 字符
-      cleanedStr = cleanedStr.replace(/[^A-Za-z0-9+/=]/g, '');
-      
-      // 尝试解码
-      const binaryString = atob(cleanedStr);
+      const binaryString = atob(str);
       const bytes = Uint8Array.from(binaryString, c => c.charCodeAt(0));
       return new TextDecoder('utf-8').decode(bytes);
     } catch (e) {
       console.warn('Base64 decoding failed:', e);
-      // 解码失败，返回原始字符串，避免整个解析过程失败
-      return str;
+      return atob(str); // Fallback to standard atob
     }
   }
 
@@ -256,7 +239,6 @@ export class SubscriptionParser {
       ['hysteria', () => this.buildHysteriaUrl(proxy)],
       ['hysteria2', () => this.buildHysteriaUrl(proxy)],
       ['tuic', () => this.buildTUICUrl(proxy)],
-      ['anytls', () => this.buildAnytlsUrl(proxy)],
       ['socks5', () => this.buildSocks5Url(proxy)]
     ]);
 
@@ -300,11 +282,6 @@ export class SubscriptionParser {
 
     // 优化：使用数组构建查询参数，提升性能
     const queryParams = [];
-
-    // 添加encryption参数（vless必须的参数）
-    // v2rayN客户端通常需要固定为none，但支持其他加密类型
-    const encryption = proxy.encryption || 'none';
-    queryParams.push(`encryption=${encryption}`);
 
     // 添加传输参数
     if (proxy.network && proxy.network !== 'tcp') {
@@ -486,41 +463,6 @@ export class SubscriptionParser {
   }
 
   /**
-   * 构建AnyTLS URL
-   */
-  buildAnytlsUrl(proxy: any) {
-    let url = `anytls://${proxy.password}@${proxy.server}:${proxy.port}`;
-
-    // 优化：使用数组构建查询参数，提升性能
-    const queryParams = [];
-
-    // 添加TLS参数
-    if (proxy.sni) {
-      queryParams.push(`sni=${proxy.sni}`);
-    }
-
-    if (proxy['client-fingerprint']) {
-      queryParams.push(`fp=${proxy['client-fingerprint']}`);
-    }
-
-    if (proxy['skip-cert-verify'] === true) {
-      queryParams.push('insecure=1');
-    }
-
-    // 构建最终URL
-    if (queryParams.length > 0) {
-      url += `?${queryParams.join('&')}`;
-    }
-
-    // 添加名称
-    if (proxy.name) {
-      url += `#${encodeURIComponent(proxy.name)}`;
-    }
-
-    return url;
-  }
-
-  /**
    * 构建Socks5 URL
    */
   buildSocks5Url(proxy: any) {
@@ -573,59 +515,29 @@ export class SubscriptionParser {
       this._nodeRegex = new RegExp(`^(${this.supportedProtocols.join('|')}):\/\/`);
     }
 
-    // 处理订阅组链接返回的错误格式：ss://anytls://... 或 ss://vless://...
-    let processedLine = line;
-    if (processedLine.startsWith('ss://')) {
-      try {
-        // 获取ss://后面的部分
-        const ssContent = processedLine.slice('ss://'.length);
-        
-        // 分离节点URL和名称
-        const hashIndex = ssContent.indexOf('#');
-        const base64Part = hashIndex !== -1 ? ssContent.slice(0, hashIndex) : ssContent;
-        const nodeNamePart = hashIndex !== -1 ? ssContent.slice(hashIndex) : '';
-        
-        // 清理base64内容（移除空格）
-        const cleanedBase64 = base64Part.replace(/\s/g, '');
-        
-        // 解码base64内容
-        let decodedUrl = this.decodeBase64(cleanedBase64);
-        
-        // 检查解码后的内容是否是其他协议的节点
-        if (decodedUrl.startsWith('anytls://') || decodedUrl.startsWith('vless://') || 
-            decodedUrl.startsWith('vmess://') || decodedUrl.startsWith('trojan://')) {
-          // 这是一个错误包装的节点，使用解码后的原始内容
-          processedLine = decodedUrl + nodeNamePart;
-        }
-      } catch (error) {
-        // 解码失败，继续使用原始行
-        console.warn('Failed to process wrapped node:', error);
-      }
-    }
-
-    if (!this._nodeRegex.test(processedLine)) return null;
+    if (!this._nodeRegex.test(line)) return null;
 
     // 提取节点名称
     let name = '';
 
     // 优化：使用更高效的字符串分割
-    const hashIndex = processedLine.indexOf('#');
+    const hashIndex = line.indexOf('#');
     if (hashIndex !== -1) {
-      name = decodeURIComponent(processedLine.substring(hashIndex + 1) || '');
+      name = decodeURIComponent(line.substring(hashIndex + 1) || '');
     }
 
     // 如果没有名称，尝试从URL中提取
     if (!name) {
-      name = this.extractNodeNameFromUrl(processedLine);
+      name = this.extractNodeNameFromUrl(line);
     }
 
     // 获取协议类型
-    const protocol = processedLine.match(this._nodeRegex)?.[1] || 'unknown';
+    const protocol = line.match(this._nodeRegex)?.[1] || 'unknown';
 
     return {
       id: crypto.randomUUID(),
       name: name || '未命名节点',
-      url: processedLine,
+      url: line,
       protocol: protocol,
       enabled: true,
       type: 'subscription',

@@ -687,8 +687,8 @@ const handleUpdateAllSubscriptions = async () => {
           if (updateResult.success) {
             const sub = subsMap.get(updateResult.id);
             if (sub) {
-              if (typeof updateResult.count === 'number') {
-                sub.nodeCount = updateResult.count;
+              if (typeof updateResult.nodeCount === 'number') {
+                sub.nodeCount = updateResult.nodeCount;
               }
               if (updateResult.userInfo) {
                 sub.userInfo = updateResult.userInfo;

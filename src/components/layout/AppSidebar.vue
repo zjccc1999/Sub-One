@@ -358,7 +358,6 @@ onUnmounted(() => {
   background: rgb(255, 255, 255);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  border-right: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 40;
@@ -367,7 +366,6 @@ onUnmounted(() => {
 
 html.dark .sidebar {
   background: rgb(15, 23, 42);
-  border-right-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
 }
 

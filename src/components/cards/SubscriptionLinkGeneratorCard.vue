@@ -33,6 +33,12 @@ const FORMAT_MAPPING: Record<string, string> = {
   'Loon': 'loon'
 };
 
+// 只显示已启用的订阅组
+const enabledProfiles = computed(() => {
+  return props.profiles.filter(profile => profile.enabled);
+});
+
+
 const subLink = computed(() => {
   const baseUrl = window.location.origin;
   const format = selectedFormat.value;
@@ -123,7 +129,7 @@ onUnmounted(() => {
               class="w-full px-4 py-3 text-sm text-gray-900 dark:text-white bg-white/60 dark:bg-gray-800/75 border-2 border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none transition-all duration-300 appearance-none cursor-pointer">
               <option value="default" class="py-2 bg-white text-gray-900 dark:bg-gray-800 dark:text-white">默认订阅 (全部启用节点)
               </option>
-              <option v-for="profile in profiles" :key="profile.id" :value="profile.customId || profile.id"
+              <option v-for="profile in enabledProfiles" :key="profile.id" :value="profile.customId || profile.id"
                 class="py-2 bg-white text-gray-900 dark:bg-gray-800 dark:text-white">
                 {{ profile.name }}
                 <span v-if="profile.nodeCount !== undefined" class="text-xs text-gray-700 dark:text-gray-300 ml-2">

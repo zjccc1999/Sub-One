@@ -355,18 +355,18 @@ onUnmounted(() => {
   width: 280px;
   display: flex;
   flex-direction: column;
-  background: rgb(255, 255, 255);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.05);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 40;
   overflow: hidden;
 }
 
 html.dark .sidebar {
-  background: rgb(15, 23, 42);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+  background: rgba(15, 23, 42, 0.5);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.2);
 }
 
 .sidebar-collapsed {

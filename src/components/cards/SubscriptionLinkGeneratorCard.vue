@@ -166,7 +166,7 @@ onUnmounted(() => {
               :class="{ 'select-none': !showUrl }" />
             <div class="flex items-center gap-2 mt-3">
               <button @click="showUrl = !showUrl"
-                class="flex-1 px-3 py-2 rounded-xl hover:bg-orange-500/20 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-all duration-200 flex items-center justify-center gap-2"
+                class="flex-1 px-3 py-2 rounded-xl hover:bg-orange-500/20 text-gray-600 dark:text-gray-300 hover:text-orange-600 dark:hover:text-orange-400 transition-all duration-200 flex items-center justify-center gap-2"
                 :title="showUrl ? '隐藏链接' : '显示链接'">
                 <svg v-if="showUrl" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -181,7 +181,7 @@ onUnmounted(() => {
                 <span class="text-sm">{{ showUrl ? '隐藏' : '显示' }}</span>
               </button>
               <button v-if="showUrl" @click="copyToClipboard"
-                class="flex-1 px-3 py-2 rounded-xl hover:bg-yellow-500/20 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-all duration-200 flex items-center justify-center gap-2"
+                class="flex-1 px-3 py-2 rounded-xl hover:bg-yellow-500/20 text-gray-600 dark:text-gray-300 hover:text-yellow-600 dark:hover:text-yellow-400 transition-all duration-200 flex items-center justify-center gap-2"
                 :title="copied ? '已复制' : '复制'">
                 <Transition name="fade" mode="out-in">
                   <svg v-if="copied" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500" fill="none"
@@ -197,7 +197,7 @@ onUnmounted(() => {
                 <span class="text-sm">{{ copied ? '已复制' : '复制' }}</span>
               </button>
               <button v-if="showUrl" @click="openNodePreview"
-                class="flex-1 px-3 py-2 rounded-xl hover:bg-indigo-500/20 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200 flex items-center justify-center gap-2"
+                class="flex-1 px-3 py-2 rounded-xl hover:bg-indigo-500/20 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all duration-200 flex items-center justify-center gap-2"
                 title="预览节点列表">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                   stroke="currentColor" stroke-width="2">

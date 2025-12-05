@@ -1,11 +1,3 @@
-没问题。针对刚才分析的 VLESS Reality 支持缺失、URL 构建不标准、类型安全以及性能优化这几个痛点，我重构了这个文件。
-主要修改点：
- * 新增 VLESS Reality 支持：在 buildVlessUrl 中增加了对 reality-opts（公钥 pbk、Short ID sid）和指纹 client-fingerprint (fp) 的提取。
- * 标准化 URL 构建：全面改用 URLSearchParams 处理查询参数，不再手动拼接字符串，解决特殊字符（如空格、符号）转义问题。
- * 类型增强：增加了 ClashProxy 接口定义，代替原来的 any，让代码维护更安全。
- * 解析逻辑优化：在 parse 中增加了简单的“嗅探”逻辑，如果是 proxies: 开头直接走 YAML 解析，避免无效的 Base64 计算。
- * UTF-8 编码修复：优化了 Base64 编码/解码函数，更好地支持中文备注。
-以下是修改后的完整代码，你可以直接替换原文件：
 import yaml from 'js-yaml';
 
 interface Node {
@@ -24,20 +16,24 @@ interface ProcessOptions {
   prependSubName?: boolean;
 }
 
-// 新增：Clash 代理配置的类型定义，避免使用 any
+// 增强：Clash 代理配置的类型定义，包含 host 字段兼容
 interface ClashProxy {
   name: string;
   type: string;
-  server: string;
+  server?: string;
+  host?: string; // 兼容非标准字段
   port: number | string;
   uuid?: string;
   password?: string;
   cipher?: string;
-  udp?: boolean;
+  udp?: boolean | number;
   tls?: boolean;
   sni?: string;
+  peer?: string; // 兼容 AnyTLS peer 字段
   network?: string;
   'client-fingerprint'?: string;
+  allowInsecure?: boolean | number; // 兼容 0/1 或 true/false
+  'skip-cert-verify'?: boolean;
   'reality-opts'?: {
     'public-key': string;
     'short-id': string;
@@ -49,15 +45,9 @@ interface ClashProxy {
   'grpc-opts'?: {
     'grpc-service-name'?: string;
   };
-  plugin?: string;
-  'plugin-opts'?: any;
-  [key: string]: any; // 允许其他字段
+  [key: string]: any;
 }
 
-/**
- * 强大的订阅解析器 (Refactored)
- * 支持多种格式：Base64、纯文本、YAML、Clash配置等
- */
 export class SubscriptionParser {
   supportedProtocols: string[];
   _base64Regex: RegExp;
@@ -80,32 +70,20 @@ export class SubscriptionParser {
     this._protocolRegex = /^(.*?):\/\//;
   }
 
-  /**
-   * 安全解码 Base64 字符串 (支持 UTF-8)
-   */
   decodeBase64(str: string) {
     try {
-      // 优先尝试 Node.js Buffer (如果环境支持)
       if (typeof Buffer !== 'undefined') {
         return Buffer.from(str, 'base64').toString('utf8');
       }
-      // 浏览器环境兼容
       const binaryString = atob(str);
       const bytes = Uint8Array.from(binaryString, c => c.charCodeAt(0));
       return new TextDecoder('utf-8').decode(bytes);
     } catch (e) {
       console.warn('Base64 decoding failed, trying permissive mode:', e);
-      try {
-          return atob(str);
-      } catch (e2) {
-          return str; // 最后防线：返回原字符串
-      }
+      try { return atob(str); } catch (e2) { return str; }
     }
   }
 
-  /**
-   * 安全编码 Base64 (支持 UTF-8 中文)
-   */
   encodeBase64(str: string) {
     try {
       if (typeof Buffer !== 'undefined') {
@@ -121,39 +99,24 @@ export class SubscriptionParser {
     }
   }
 
-  /**
-   * 解析订阅内容
-   */
   parse(content: string, subscriptionName = ''): Node[] {
-    if (!content || typeof content !== 'string') {
-      return [];
-    }
+    if (!content || typeof content !== 'string') return [];
 
     let methods: (() => Node[])[] = [];
 
-    // 优化：Magic String 快速检测，提升性能
-    const trimmedStart = content.trimStart();
-    
-    // 1. 如果包含 proxies: 或 nodes:，极高概率是 YAML
-    if (content.includes('proxies:') || content.includes('nodes:')) {
+    // 1. 优先检测 YAML (包含 proxies/nodes 关键字)
+    if (content.includes('proxies:') || content.includes('nodes:') || content.includes('"type":')) {
       methods.push(() => this.parseYAML(content, subscriptionName));
       methods.push(() => this.parseClashConfig(content, subscriptionName));
     }
-    
-    // 2. Base64 检测 (如果不是明显的YAML)
+
+    // 2. Base64 检测
     const cleanedContent = content.replace(this._whitespaceRegex, '');
     if (this._base64Regex.test(cleanedContent) && cleanedContent.length > 20) {
-      // 如果看起来像Base64，把它放在YAML之前或之后取决于具体情况
-      // 这里策略是：如果不像YAML，优先Base64
-      if (methods.length === 0) {
-          methods.push(() => this.parseBase64(content, subscriptionName));
-      } else {
-          // 如果也可能是YAML，Base64排后面
-          methods.push(() => this.parseBase64(content, subscriptionName));
-      }
+      methods.push(() => this.parseBase64(content, subscriptionName));
     }
 
-    // 3. 兜底尝试纯文本
+    // 3. 纯文本
     methods.push(() => this.parsePlainText(content, subscriptionName));
 
     for (const method of methods) {
@@ -163,28 +126,20 @@ export class SubscriptionParser {
           console.log(`解析成功，找到 ${result.length} 个节点`);
           return result;
         }
-      } catch (error) {
-        continue;
-      }
+      } catch (error) { continue; }
     }
-
     return [];
   }
 
   parseBase64(content: string, subscriptionName: string): Node[] {
     const cleanedContent = content.replace(this._whitespaceRegex, '');
-    if (!this._base64Regex.test(cleanedContent) || cleanedContent.length < 20) {
-      throw new Error('不是有效的Base64编码');
-    }
-
     try {
       const decodedContent = this.decodeBase64(cleanedContent);
       const decodedLines = decodedContent.split(this._newlineRegex).filter(line => line.trim() !== '');
-
-      if (!decodedLines.some(line => this.isNodeUrl(line))) {
-        throw new Error('Base64解码后未找到有效的节点链接');
+      // 如果解码后是 JSON/YAML 内容，递归调用 parse
+      if (decodedContent.includes('proxies:') || decodedContent.trim().startsWith('{')) {
+         return this.parse(decodedContent, subscriptionName);
       }
-
       return this.parseNodeLines(decodedLines, subscriptionName);
     } catch (error: any) {
       throw new Error(`Base64解码失败: ${error.message}`);
@@ -194,8 +149,11 @@ export class SubscriptionParser {
   parseYAML(content: string, subscriptionName: string): Node[] {
     try {
       const parsed: any = yaml.load(content);
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('无效的YAML格式');
+      if (!parsed || typeof parsed !== 'object') throw new Error('无效的YAML/JSON格式');
+
+      // 支持直接解析单个节点对象
+      if (parsed.type && (parsed.server || parsed.host) && parsed.port) {
+         return this.parseClashProxies([parsed], subscriptionName);
       }
 
       if (parsed.proxies && Array.isArray(parsed.proxies)) {
@@ -211,15 +169,7 @@ export class SubscriptionParser {
   }
 
   parseClashConfig(content: string, subscriptionName: string): Node[] {
-    try {
-      const parsed: any = yaml.load(content);
-      if (!parsed || !parsed.proxies || !Array.isArray(parsed.proxies)) {
-        throw new Error('不是有效的Clash配置');
-      }
-      return this.parseClashProxies(parsed.proxies, subscriptionName);
-    } catch (error: any) {
-      throw new Error(`Clash配置解析失败: ${error.message}`);
-    }
+    return this.parseYAML(content, subscriptionName);
   }
 
   parsePlainText(content: string, subscriptionName: string): Node[] {
@@ -238,7 +188,7 @@ export class SubscriptionParser {
         if (nodeUrl) {
           nodes.push({
             id: crypto.randomUUID(),
-            name: proxy.name || '未命名节点',
+            name: proxy.name || proxy.title || '未命名节点', // 兼容 title 字段
             url: nodeUrl,
             protocol: proxy.type?.toLowerCase() || 'unknown',
             enabled: true,
@@ -249,15 +199,15 @@ export class SubscriptionParser {
         }
       } catch (error) {
         console.warn(`解析代理配置失败: ${proxy.name}`, error);
-        continue;
       }
     }
     return nodes;
   }
 
-  convertClashProxyToUrl(proxy: ClashProxy) { // 使用新定义的接口
+  convertClashProxyToUrl(proxy: ClashProxy) {
     const type = proxy.type?.toLowerCase();
-    const server = proxy.server;
+    // 关键修复：兼容 host 字段作为 server
+    const server = proxy.server || proxy.host;
     const port = proxy.port;
 
     if (!server || !port) return null;
@@ -271,6 +221,7 @@ export class SubscriptionParser {
       ['hysteria', () => this.buildHysteriaUrl(proxy)],
       ['hysteria2', () => this.buildHysteriaUrl(proxy)],
       ['tuic', () => this.buildTUICUrl(proxy)],
+      ['anytls', () => this.buildAnyTLSUrl(proxy)], // 新增 AnyTLS
       ['socks5', () => this.buildSocks5Url(proxy)]
     ]);
 
@@ -278,14 +229,48 @@ export class SubscriptionParser {
     return handler ? handler() : null;
   }
 
-  /**
-   * 构建VMess URL (修复 Base64 编码问题)
-   */
+  // --- 新增：AnyTLS URL 构建方法 ---
+  buildAnyTLSUrl(proxy: ClashProxy) {
+    const params = new URLSearchParams();
+    
+    // 映射 allowInsecure/skip-cert-verify -> insecure
+    if (proxy.allowInsecure || proxy['skip-cert-verify']) {
+        params.set('insecure', '1');
+    }
+    
+    // 映射 peer -> sni
+    if (proxy.peer || proxy.sni) {
+        params.set('sni', proxy.peer || proxy.sni);
+    }
+
+    // 构建认证部分 (uuid:password)
+    let userInfo = '';
+    if (proxy.uuid && proxy.password) {
+        userInfo = `${proxy.uuid}:${proxy.password}`;
+    } else if (proxy.password) {
+        userInfo = proxy.password;
+    } else if (proxy.uuid) {
+        userInfo = proxy.uuid;
+    }
+
+    const address = `${proxy.server || proxy.host}:${proxy.port}`;
+    const hash = encodeURIComponent(proxy.name || proxy.title || 'AnyTLS节点');
+
+    // 格式：anytls://userInfo@host:port?params#name
+    let url = `anytls://`;
+    if (userInfo) url += `${userInfo}@`;
+    url += `${address}`;
+    if (params.toString()) url += `?${params.toString()}`;
+    url += `#${hash}`;
+
+    return url;
+  }
+
   buildVmessUrl(proxy: ClashProxy) {
     const config = {
       v: '2',
       ps: proxy.name || 'VMess节点',
-      add: proxy.server,
+      add: proxy.server || proxy.host,
       port: proxy.port,
       id: proxy.uuid,
       aid: proxy.alterId || 0,
@@ -295,23 +280,15 @@ export class SubscriptionParser {
       path: proxy['ws-opts']?.path || proxy.path || '',
       tls: proxy.tls ? 'tls' : 'none'
     };
-    
-    // 使用安全的 Base64 编码
     const jsonStr = JSON.stringify(config);
     const base64 = this.encodeBase64(jsonStr);
     return `vmess://${base64}`;
   }
 
-  /**
-   * 构建VLESS URL (大幅增强，支持 Reality)
-   */
   buildVlessUrl(proxy: ClashProxy) {
     const params = new URLSearchParams();
-    
-    // 1. 基础参数
     params.set('security', proxy.tls ? 'tls' : 'none');
     
-    // 2. 传输层 (Transport)
     const network = proxy.network || 'tcp';
     params.set('type', network);
 
@@ -319,118 +296,77 @@ export class SubscriptionParser {
       if (proxy['ws-opts']?.path) params.set('path', proxy['ws-opts'].path);
       if (proxy['ws-opts']?.headers?.Host) params.set('host', proxy['ws-opts'].headers.Host);
     } else if (network === 'grpc') {
-      if (proxy['grpc-opts']?.['grpc-service-name']) {
-        params.set('serviceName', proxy['grpc-opts']['grpc-service-name']);
-      }
+      if (proxy['grpc-opts']?.['grpc-service-name']) params.set('serviceName', proxy['grpc-opts']['grpc-service-name']);
     }
 
-    // 3. Reality & TLS 特殊处理
-    // 检查是否启用了 Reality (通常 Clash 配置里会有 reality-opts 或者 client-fingerprint)
     if (proxy['reality-opts'] || (proxy['client-fingerprint'] && proxy.tls)) {
        params.set('security', 'reality');
        if (proxy['reality-opts']?.['public-key']) params.set('pbk', proxy['reality-opts']['public-key']);
        if (proxy['reality-opts']?.['short-id']) params.set('sid', proxy['reality-opts']['short-id']);
-       // Flow (Vision)
        if (proxy.flow) params.set('flow', proxy.flow);
     }
     
-    // 指纹
-    if (proxy['client-fingerprint']) {
-        params.set('fp', proxy['client-fingerprint']);
-    }
+    if (proxy['client-fingerprint']) params.set('fp', proxy['client-fingerprint']);
+    if (proxy.sni || proxy.servername) params.set('sni', proxy.sni || proxy.servername);
 
-    // SNI
-    if (proxy.sni || proxy.servername) {
-      params.set('sni', proxy.sni || proxy.servername);
-    }
-
-    // 构建链接
     const userInfo = proxy.uuid;
-    const address = `${proxy.server}:${proxy.port}`;
-    const query = params.toString();
+    const address = `${proxy.server || proxy.host}:${proxy.port}`;
     const hash = encodeURIComponent(proxy.name || 'VLESS节点');
 
-    return `vless://${userInfo}@${address}?${query}#${hash}`;
+    return `vless://${userInfo}@${address}?${params.toString()}#${hash}`;
   }
 
-  /**
-   * 构建Trojan URL (标准化)
-   */
   buildTrojanUrl(proxy: ClashProxy) {
     const params = new URLSearchParams();
-    if (proxy.sni) params.set('sni', proxy.sni);
+    if (proxy.sni || proxy.peer) params.set('sni', proxy.sni || proxy.peer);
     if (proxy.network === 'ws') params.set('type', 'ws');
     if (proxy['ws-opts']?.path) params.set('path', proxy['ws-opts'].path);
     if (proxy['ws-opts']?.headers?.Host) params.set('host', proxy['ws-opts'].headers.Host);
+    if (proxy.allowInsecure) params.set('allowInsecure', '1');
 
     const userInfo = proxy.password;
-    const address = `${proxy.server}:${proxy.port}`;
+    const address = `${proxy.server || proxy.host}:${proxy.port}`;
     const hash = encodeURIComponent(proxy.name || 'Trojan节点');
 
     return `trojan://${userInfo}@${address}?${params.toString()}#${hash}`;
   }
 
-  /**
-   * 构建Shadowsocks URL
-   */
   buildShadowsocksUrl(proxy: ClashProxy) {
-    const method = proxy.cipher;
-    const password = proxy.password;
-    const auth = `${method}:${password}`;
-    // 使用安全编码
+    const auth = `${proxy.cipher}:${proxy.password}`;
     const base64 = this.encodeBase64(auth);
     const hash = encodeURIComponent(proxy.name || 'SS节点');
-    
-    // 标准 SS 格式：ss://base64(method:password)@server:port#name
-    return `ss://${base64}@${proxy.server}:${proxy.port}#${hash}`;
+    return `ss://${base64}@${proxy.server || proxy.host}:${proxy.port}#${hash}`;
   }
 
-  /**
-   * 构建ShadowsocksR URL
-   */
   buildShadowsocksRUrl(proxy: ClashProxy) {
     const configStr = [
-      proxy.server,
+      proxy.server || proxy.host,
       proxy.port,
       proxy.protocol || 'origin',
       proxy.cipher,
       proxy.obfs || 'plain',
       this.encodeBase64(proxy.password || '')
     ].join(':');
-
     const query = new URLSearchParams();
     if (proxy['protocol-param']) query.set('protoparam', this.encodeBase64(proxy['protocol-param']));
     if (proxy['obfs-param']) query.set('obfsparam', this.encodeBase64(proxy['obfs-param']));
     if (proxy.name) query.set('remarks', this.encodeBase64(proxy.name));
-
-    const urlBase64 = this.encodeBase64(configStr);
-    return `ssr://${urlBase64}/?${query.toString()}`;
+    return `ssr://${this.encodeBase64(configStr)}/?${query.toString()}`;
   }
 
-  /**
-   * 构建Hysteria/Hy2 URL
-   */
   buildHysteriaUrl(proxy: ClashProxy) {
     const params = new URLSearchParams();
-    
-    // 通用参数映射
     if (proxy.protocol) params.set('protocol', proxy.protocol);
-    if (proxy.sni) params.set('sni', proxy.sni);
+    if (proxy.sni || proxy.peer) params.set('sni', proxy.sni || proxy.peer);
     if (proxy.auth || proxy.password) params.set('auth', proxy.auth || proxy.password);
-    if (proxy.alpn) {
-        const alpn = Array.isArray(proxy.alpn) ? proxy.alpn.join(',') : proxy.alpn;
-        params.set('alpn', alpn);
-    }
+    if (proxy.alpn) params.set('alpn', Array.isArray(proxy.alpn) ? proxy.alpn.join(',') : proxy.alpn);
     if (proxy.up) params.set('up', proxy.up);
     if (proxy.down) params.set('down', proxy.down);
-    if (proxy['skip-cert-verify']) params.set('insecure', '1');
+    if (proxy['skip-cert-verify'] || proxy.allowInsecure) params.set('insecure', '1');
 
-    const address = `${proxy.server}:${proxy.port}`;
+    const address = `${proxy.server || proxy.host}:${proxy.port}`;
     const hash = encodeURIComponent(proxy.name || 'Hysteria节点');
-    
-    // 区分 Hysteria 1 和 2 的协议头
     const scheme = (proxy.type === 'hysteria2') ? 'hysteria2' : 'hysteria';
-    
     return `${scheme}://${address}?${params.toString()}#${hash}`;
   }
 
@@ -439,22 +375,17 @@ export class SubscriptionParser {
     if (proxy.sni) params.set('sni', proxy.sni);
     if (proxy.alpn) params.set('alpn', Array.isArray(proxy.alpn) ? proxy.alpn.join(',') : proxy.alpn);
     if (proxy['skip-cert-verify']) params.set('insecure', '1');
-    if (proxy.congestion_controller) params.set('congestion_controller', proxy.congestion_controller);
-
     const userInfo = `${proxy.uuid}:${proxy.password}`;
-    const address = `${proxy.server}:${proxy.port}`;
+    const address = `${proxy.server || proxy.host}:${proxy.port}`;
     const hash = encodeURIComponent(proxy.name || 'TUIC节点');
-
     return `tuic://${userInfo}@${address}?${params.toString()}#${hash}`;
   }
 
   buildSocks5Url(proxy: ClashProxy) {
     let auth = '';
-    if (proxy.username && proxy.password) {
-      auth = `${proxy.username}:${proxy.password}@`;
-    }
+    if (proxy.username && proxy.password) auth = `${proxy.username}:${proxy.password}@`;
     const hash = encodeURIComponent(proxy.name || 'Socks5节点');
-    return `socks5://${auth}${proxy.server}:${proxy.port}#${hash}`;
+    return `socks5://${auth}${proxy.server || proxy.host}:${proxy.port}#${hash}`;
   }
 
   parseGenericNodes(nodes: any[], subscriptionName: string): Node[] {
@@ -484,14 +415,9 @@ export class SubscriptionParser {
     if (!this._nodeRegex.test(line)) return null;
 
     let name = '';
-    const hashIndex = line.lastIndexOf('#'); // 修复：使用 lastIndexOf 避免参数中包含 #
-    if (hashIndex !== -1) {
-      name = decodeURIComponent(line.substring(hashIndex + 1) || '');
-    }
-
-    if (!name) {
-      name = this.extractNodeNameFromUrl(line);
-    }
+    const hashIndex = line.lastIndexOf('#');
+    if (hashIndex !== -1) name = decodeURIComponent(line.substring(hashIndex + 1) || '');
+    if (!name) name = this.extractNodeNameFromUrl(line);
 
     const protocol = line.match(this._nodeRegex)?.[1] || 'unknown';
 
@@ -508,25 +434,11 @@ export class SubscriptionParser {
 
   extractNodeNameFromUrl(url: string) {
     try {
-      const protocol = url.match(this._protocolRegex)?.[1] || '';
-      
-      // 简单处理，复杂的解码交给具体客户端，这里只做兜底
-      if (protocol === 'vmess') {
-          try {
-             const b64 = url.slice(8);
-             const json = JSON.parse(this.decodeBase64(b64));
-             return json.ps || json.add;
-          } catch(e) {}
-      }
-      
       const hashIndex = url.lastIndexOf('#');
       if (hashIndex > -1) return decodeURIComponent(url.slice(hashIndex + 1));
-      
       const urlObj = new URL(url);
       return urlObj.hostname;
-    } catch {
-      return '未命名节点';
-    }
+    } catch { return '未命名节点'; }
   }
 
   isNodeUrl(line: string) {
@@ -536,18 +448,13 @@ export class SubscriptionParser {
     return this._nodeRegex.test(line.trim());
   }
 
-  getSupportedProtocols() {
-    return [...this.supportedProtocols];
-  }
+  getSupportedProtocols() { return [...this.supportedProtocols]; }
 
-  // processNodes 保持不变...
   processNodes(nodes: Node[], subName: string, options: ProcessOptions = {}): Node[] {
     let processed = nodes;
-
     if (options.exclude && options.exclude.trim()) {
       const rules = options.exclude.trim().split('\n').map(r => r.trim()).filter(Boolean);
       const keepRules = rules.filter(r => r.toLowerCase().startsWith('keep:'));
-
       if (keepRules.length > 0) {
         const nameRegexParts: string[] = [];
         const protocolsToKeep = new Set();
@@ -555,16 +462,12 @@ export class SubscriptionParser {
           const content = rule.substring(5).trim();
           if (content.toLowerCase().startsWith('proto:')) {
             content.substring(6).split(',').forEach(p => protocolsToKeep.add(p.trim().toLowerCase()));
-          } else {
-            nameRegexParts.push(content);
-          }
+          } else { nameRegexParts.push(content); }
         });
         const nameRegex = nameRegexParts.length ? new RegExp(nameRegexParts.join('|'), 'i') : null;
-
         processed = processed.filter(node => {
-          if (protocolsToKeep.has(node.protocol)) return true;
-          if (nameRegex && nameRegex.test(node.name)) return true;
-          return false;
+            if (protocolsToKeep.has(node.protocol)) return true;
+            return nameRegex ? nameRegex.test(node.name) : false;
         });
       } else {
         const protocolsToExclude = new Set();
@@ -572,20 +475,15 @@ export class SubscriptionParser {
         rules.forEach(rule => {
           if (rule.toLowerCase().startsWith('proto:')) {
             rule.substring(6).split(',').forEach(p => protocolsToExclude.add(p.trim().toLowerCase()));
-          } else {
-            nameRegexParts.push(rule);
-          }
+          } else { nameRegexParts.push(rule); }
         });
         const nameRegex = nameRegexParts.length ? new RegExp(nameRegexParts.join('|'), 'i') : null;
-
         processed = processed.filter(node => {
           if (protocolsToExclude.has(node.protocol)) return false;
-          if (nameRegex && nameRegex.test(node.name)) return false;
-          return true;
+          return nameRegex ? !nameRegex.test(node.name) : true;
         });
       }
     }
-
     if (options.prependSubName && subName) {
       processed = processed.map(node => {
         if (!node.name.startsWith(subName)) {
@@ -597,10 +495,8 @@ export class SubscriptionParser {
         return node;
       });
     }
-
     return processed;
   }
 }
 
 export const subscriptionParser = new SubscriptionParser();
-

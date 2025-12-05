@@ -979,7 +979,19 @@ const handleNodeDragEnd = async () => {
     </template>
   </Modal>
 
-  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" />
+  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="async (val) => {
+    if (!val) {
+      try {
+        const { fetchSettings } = await import('../../lib/api');
+        const newConfig = await fetchSettings();
+        if (newConfig) {
+          config.value = newConfig;
+        }
+      } catch (e) {
+        console.error('Failed to reload config:', e);
+      }
+    }
+  }" />
   <SubscriptionImportModal :show="showSubscriptionImportModal" @update:show="showSubscriptionImportModal = $event"
     :add-nodes-from-bulk="addNodesFromBulk"
     :on-import-success="async () => { await handleDirectSave('导入订阅'); triggerDataUpdate(); }" />

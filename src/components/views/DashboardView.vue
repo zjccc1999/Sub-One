@@ -743,6 +743,12 @@ const handleSaveSortChanges = async () => {
   }
 };
 
+const handleSettingsModalChange = (val: boolean) => {
+  if (!val) {
+    window.location.reload();
+  }
+};
+
 // 导出节点功能
 const handleExportNodes = async () => {
   // 优先尝试使用手动节点订阅Token导出链接
@@ -979,11 +985,7 @@ const handleNodeDragEnd = async () => {
     </template>
   </Modal>
 
-  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="(val) => {
-    if (!val) {
-      window.location.reload();
-    }
-  }" />
+  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="handleSettingsModalChange" />
   <SubscriptionImportModal :show="showSubscriptionImportModal" @update:show="showSubscriptionImportModal = $event"
     :add-nodes-from-bulk="addNodesFromBulk"
     :on-import-success="async () => { await handleDirectSave('导入订阅'); triggerDataUpdate(); }" />

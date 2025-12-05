@@ -556,29 +556,52 @@ export class SubscriptionParser {
       this._nodeRegex = new RegExp(`^(${this.supportedProtocols.join('|')}):\/\/`);
     }
 
-    if (!this._nodeRegex.test(line)) return null;
+    // 处理订阅组链接返回的错误格式：ss://anytls://... 或 ss://vless://...
+    let processedLine = line;
+    if (processedLine.startsWith('ss://')) {
+      try {
+        const ssPart = processedLine.split('://')[1];
+        const hashIndex = ssPart.indexOf('#');
+        const base64Part = hashIndex !== -1 ? ssPart.substring(0, hashIndex) : ssPart;
+        const decoded = this.decodeBase64(base64Part);
+        
+        // 检查解码后的内容是否包含其他协议
+        if (decoded.startsWith('anytls://') || decoded.startsWith('vless://') || decoded.startsWith('vmess://') || decoded.startsWith('trojan://')) {
+          // 这是一个错误包装的节点，使用解码后的原始内容
+          processedLine = decoded;
+          // 如果有名称，重新添加到URL中
+          if (hashIndex !== -1) {
+            processedLine += ssPart.substring(hashIndex);
+          }
+        }
+      } catch (e) {
+        // 解码失败，继续使用原始行
+      }
+    }
+
+    if (!this._nodeRegex.test(processedLine)) return null;
 
     // 提取节点名称
     let name = '';
 
     // 优化：使用更高效的字符串分割
-    const hashIndex = line.indexOf('#');
+    const hashIndex = processedLine.indexOf('#');
     if (hashIndex !== -1) {
-      name = decodeURIComponent(line.substring(hashIndex + 1) || '');
+      name = decodeURIComponent(processedLine.substring(hashIndex + 1) || '');
     }
 
     // 如果没有名称，尝试从URL中提取
     if (!name) {
-      name = this.extractNodeNameFromUrl(line);
+      name = this.extractNodeNameFromUrl(processedLine);
     }
 
     // 获取协议类型
-    const protocol = line.match(this._nodeRegex)?.[1] || 'unknown';
+    const protocol = processedLine.match(this._nodeRegex)?.[1] || 'unknown';
 
     return {
       id: crypto.randomUUID(),
       name: name || '未命名节点',
-      url: line,
+      url: processedLine,
       protocol: protocol,
       enabled: true,
       type: 'subscription',

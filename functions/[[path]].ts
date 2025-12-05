@@ -135,8 +135,7 @@ async function handleCronTrigger(env: Env) {
     const allSubs = JSON.parse(JSON.stringify(originalSubs)); // 深拷贝以便比较
     const settings = await env.SUB_ONE_KV.get(KV_KEY_SETTINGS, 'json') || defaultSettings;
 
-    // 使用全局匹配，不依赖多行模式
-    const nodeRegex = /(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g;
+    const nodeRegex = /^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//gm;
     let changesMade = false;
 
     for (const sub of allSubs) {
@@ -360,38 +359,12 @@ async function handleApiRequest(request: Request, env: Env) {
                     env.SUB_ONE_KV.get(KV_KEY_PROFILES, 'json').then(res => res || []),
                     env.SUB_ONE_KV.get(KV_KEY_SETTINGS, 'json').then(res => res || {} as any)
                 ]);
-
-                // 为订阅组附加节点数量信息
-                const profilesWithNodeCount = (profiles as any[]).map(profile => {
-                    let totalNodes = 0;
-
-                    // 1. 统计订阅节点
-                    if (profile.subscriptions && Array.isArray(profile.subscriptions)) {
-                        profile.subscriptions.forEach((subId: string) => {
-                            const sub = (subs as any[]).find(s => s.id === subId);
-                            if (sub && sub.nodeCount) {
-                                totalNodes += sub.nodeCount;
-                            }
-                        });
-                    }
-
-                    // 2. 统计手动节点
-                    if (profile.manualNodes && Array.isArray(profile.manualNodes)) {
-                        totalNodes += profile.manualNodes.length;
-                    }
-
-                    return {
-                        ...profile,
-                        nodeCount: totalNodes
-                    };
-                });
-
                 const config = {
                     FileName: settings.FileName || 'SUB_ONE',
                     mytoken: settings.mytoken || 'auto',
                     profileToken: settings.profileToken || ''  // 默认为空
                 };
-                return new Response(JSON.stringify({ subs, profiles: profilesWithNodeCount, config }), { headers: { 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify({ subs, profiles, config }), { headers: { 'Content-Type': 'application/json' } });
             } catch (e) {
                 console.error('[API Error /data]', 'Failed to read from KV:', e);
                 return new Response(JSON.stringify({ error: '读取初始数据失败' }), { status: 500 });
@@ -538,8 +511,7 @@ async function handleApiRequest(request: Request, env: Env) {
                     // 方法1: 尝试Base64解码后匹配节点链接
                     try {
                         const decoded = atob(text.replace(/\s/g, ''));
-                        // 使用全局匹配，不依赖多行模式
-                        const lineMatches = decoded.match(/(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g);
+                        const lineMatches = decoded.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls):\/\//gm);
                         if (lineMatches) {
                             nodeCount = lineMatches.length;
                         }
@@ -563,7 +535,7 @@ async function handleApiRequest(request: Request, env: Env) {
 
                     // 方法3: 直接匹配原始文本中的节点链接
                     if (nodeCount === 0) {
-                        const lineMatches = text.match(/(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g);
+                        const lineMatches = text.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls):\/\//gm);
                         if (lineMatches) {
                             nodeCount = lineMatches.length;
                         }
@@ -674,8 +646,7 @@ async function handleApiRequest(request: Request, env: Env) {
                             // 方法1: 尝试Base64解码后匹配节点链接
                             try {
                                 const decoded = atob(text.replace(/\s/g, ''));
-                                // 使用全局匹配，不依赖多行模式
-                                const lineMatches = decoded.match(/(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g);
+                                const lineMatches = decoded.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//gm);
                                 if (lineMatches) {
                                     nodeCount = lineMatches.length;
                                 }
@@ -697,7 +668,7 @@ async function handleApiRequest(request: Request, env: Env) {
 
                             // 方法3: 直接匹配原始文本中的节点链接
                             if (nodeCount === 0) {
-                                const lineMatches = text.match(/(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//g);
+                                const lineMatches = text.match(/^(ss|ssr|vmess|vless|trojan|hysteria2?|hy|hy2|tuic|anytls|socks5):\/\//gm);
                                 if (lineMatches) {
                                     nodeCount = lineMatches.length;
                                 }
@@ -1519,48 +1490,14 @@ const subscriptionParser = new SubscriptionParser();
 async function generateCombinedNodeList(context, config, userAgent, subs, prependedContent = '') {
     // 1. 处理手动节点
     const manualNodes = subs.filter(sub => !sub.url.toLowerCase().startsWith('http'));
-    const httpSubs = subs.filter(sub => sub.url.toLowerCase().startsWith('http'));
-
-    //  **关键优化：如果只有一个HTTP订阅且没有手动节点，直接返回原始内容**
-    // 这样可以避免解析过程中过滤掉某个特殊协议（如 anytls）
-    if (httpSubs.length === 1 && manualNodes.length === 0 && !prependedContent) {
-        try {
-            const sub = httpSubs[0];
-            const response = await Promise.race([
-                fetch(new Request(sub.url, {
-                    headers: { 'User-Agent': userAgent },
-                    redirect: "follow",
-                    cf: { insecureSkipVerify: true }
-                } as any)),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-            ]) as Response;
-
-            if (response.ok) {
-                let rawContent = await response.text();
-                // 如果有 exclude 规则，才需要解析处理
-                if (sub.exclude && sub.exclude.trim()) {
-                    const nodes = subscriptionParser.parse(rawContent, sub.name, {
-                        exclude: sub.exclude,
-                        prependSubName: config.prependSubName
-                    });
-                    return nodes.join('\n');
-                }
-                // 否则直接返回原始内容（保留所有协议）
-                return rawContent;
-            }
-        } catch (e) {
-            console.error(`Failed to fetch single sub:`, e);
-            // 失败则继续使用原有逻辑
-        }
-    }
-
-    // 2. 标准流程：解析和合并（用于多订阅或有手动节点的情况）
     const processedManualNodes = subscriptionParser.processNodes(
         manualNodes.map(n => n.url),
         '手动节点',
         { prependSubName: config.prependSubName }
     );
 
+    // 2. 处理 HTTP 订阅
+    const httpSubs = subs.filter(sub => sub.url.toLowerCase().startsWith('http'));
     const subPromises = httpSubs.map(async (sub) => {
         try {
             const response = await Promise.race([
@@ -1786,63 +1723,27 @@ async function handleSubRequest(context: EventContext<Env, any, any>) {
 
     // 使用固定的 User-Agent 请求上游订阅，避免因客户端 UA 导致被屏蔽或返回错误格式
     const upstreamUserAgent = 'Clash for Windows/0.20.39';
+    const combinedNodeList = await generateCombinedNodeList(context, config, upstreamUserAgent, targetSubs, prependedContentForSubconverter);
 
-    // **优化 Base64 格式：直接获取原始内容，不解析**
-    // 这样可以保留所有协议（包括 AnyTLS）
     if (targetFormat === 'base64') {
-        let contentToEncode = '';
-
+        let contentToEncode;
         if (isProfileExpired) {
-            contentToEncode = DEFAULT_EXPIRED_NODE + '\n';
+            contentToEncode = DEFAULT_EXPIRED_NODE + '\n'; // Return the expired node link for base64 clients
         } else {
-            const contentParts: string[] = [];
-
-            // 1. 获取所有 HTTP 订阅的原始内容
-            const httpSubs = targetSubs.filter(sub => sub.url && sub.url.toLowerCase().startsWith('http'));
-            for (const sub of httpSubs) {
-                try {
-                    const response = await Promise.race([
-                        fetch(new Request(sub.url, {
-                            headers: { 'User-Agent': upstreamUserAgent },
-                            redirect: "follow",
-                            cf: { insecureSkipVerify: true }
-                        } as any)),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-                    ]) as Response;
-
-                    if (response.ok) {
-                        let rawContent = await response.text();
-                        // 去除可能的 Base64 外层编码
-                        try {
-                            // 尝试解码，如果是Base64编码的内容
-                            const decoded = atob(rawContent.trim());
-                            if (decoded && /^(ss|ssr|vmess|vless|trojan|hysteria|hy|tuic|anytls):\/\//.test(decoded)) {
-                                rawContent = decoded;
-                            }
-                        } catch (e) {
-                            // 不是Base64或解码失败，使用原始内容
-                        }
-                        contentParts.push(rawContent);
-                    }
-                } catch (e) {
-                    console.error(`Failed to fetch sub ${sub.name}:`, e);
-                }
-            }
-
-            // 2. 添加手动节点
-            const manualNodes = targetSubs.filter(sub => sub.url && !sub.url.toLowerCase().startsWith('http'));
-            contentParts.push(...manualNodes.map(n => n.url));
-
-            // 3. 添加流量提示
-            if (prependedContentForSubconverter) {
-                contentParts.push(prependedContentForSubconverter);
-            }
-
-            contentToEncode = contentParts.join('\n');
+            contentToEncode = combinedNodeList;
         }
-
         const headers = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
         return new Response(btoa(unescape(encodeURIComponent(contentToEncode))), { headers });
+    }
+
+    const base64Content = btoa(unescape(encodeURIComponent(combinedNodeList)));
+
+    const callbackToken = await getCallbackToken(env);
+    const callbackPath = profileIdentifier ? `/${token}/${profileIdentifier}` : `/${token}`;
+    const callbackUrl = `${url.protocol}//${url.host}${callbackPath}?target=base64&callback_token=${callbackToken}`;
+    if (url.searchParams.get('callback_token') === callbackToken) {
+        const headers = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
+        return new Response(base64Content, { headers });
     }
 
     // 智能处理：如果用户填入了 http:// 或 https:// 前缀，自动去除，防止 URL 拼接错误
@@ -1862,33 +1763,7 @@ async function handleSubRequest(context: EventContext<Env, any, any>) {
         subconverterUrl.searchParams.set('ver', 'meta');
     }
 
-    // **终极优化：完全由 Subconverter 处理，不再由 Worker 解析节点**
-    // Subconverter 支持混合传递：订阅链接|节点链接1|节点链接2
-    // 优点：100% 保留所有协议（anytls、vless、reality等）和字段
-
-    const urlParts: string[] = [];
-
-    // 1. 添加所有 HTTP 订阅链接
-    const httpSubUrls = targetSubs
-        .filter(sub => sub.url && sub.url.toLowerCase().startsWith('http'))
-        .map(sub => sub.url);
-    urlParts.push(...httpSubUrls);
-
-    // 2. 添加所有手动节点（直接传递节点链接）
-    const manualNodeUrls = targetSubs
-        .filter(sub => sub.url && !sub.url.toLowerCase().startsWith('http'))
-        .map(sub => sub.url);
-    urlParts.push(...manualNodeUrls);
-
-    // 3. 添加流量提示节点（如果有）
-    if (prependedContentForSubconverter) {
-        urlParts.push(prependedContentForSubconverter);
-    }
-
-    // 4. 组合成 URL 参数（用 | 分隔）
-    const urlParam = urlParts.join('|');
-
-    subconverterUrl.searchParams.set('url', urlParam);
+    subconverterUrl.searchParams.set('url', callbackUrl);
     if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
         subconverterUrl.searchParams.set('config', effectiveSubConfig);
     }

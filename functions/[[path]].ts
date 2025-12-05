@@ -72,7 +72,7 @@ async function conditionalKVPut(env: Env, key: string, newData: any, oldData: an
 const defaultSettings = {
     FileName: 'Sub-One',
     mytoken: 'auto',
-    profileToken: 'profiles',
+    profileToken: '',  // 默认为空，用户需主动设置
     subConverter: 'sub.xeton.dev',  // 更可靠的后端，支持 Reality
     subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
     prependSubName: true,
@@ -362,7 +362,7 @@ async function handleApiRequest(request: Request, env: Env) {
                 const config = {
                     FileName: settings.FileName || 'SUB_ONE',
                     mytoken: settings.mytoken || 'auto',
-                    profileToken: settings.profileToken || 'profiles'
+                    profileToken: settings.profileToken || ''  // 默认为空
                 };
                 return new Response(JSON.stringify({ subs, profiles, config }), { headers: { 'Content-Type': 'application/json' } });
             } catch (e) {

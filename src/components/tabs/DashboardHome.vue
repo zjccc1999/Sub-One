@@ -158,8 +158,8 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="text-gray-800 dark:text-white font-bold text-base">每日一言</h3>
-              <p class="text-gray-500 dark:text-gray-400 text-xs">Daily Inspiration</p>
+              <h3 class="text-lg font-bold text-gray-900 dark:text-white">每日一言</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">Daily Inspiration</p>
             </div>
           </div>
 
@@ -220,7 +220,7 @@ onMounted(() => {
         <div class="relative z-10 h-full flex flex-col justify-between">
           <div class="flex justify-between items-start">
             <div>
-              <p class="text-gray-600 dark:text-indigo-100 font-medium mb-1 text-sm">订阅源状态</p>
+              <p class="text-sm font-medium text-gray-500 dark:text-indigo-200 mb-1.5">订阅源状态</p>
               <h3 class="text-5xl font-bold tracking-tight text-gray-900 dark:text-white">{{ subscriptions.length
               }}<span class="text-2xl text-gray-600 dark:text-indigo-200 font-normal ml-2">个</span></h3>
             </div>
@@ -235,7 +235,7 @@ onMounted(() => {
 
           <div class="mt-8">
             <div class="flex justify-between items-end mb-2">
-              <span class="text-gray-600 dark:text-indigo-100 text-sm">活跃度</span>
+              <span class="text-sm font-medium text-gray-500 dark:text-indigo-200">活跃度</span>
               <span class="text-2xl font-bold text-gray-900 dark:text-white">{{ activeSubscriptions }} <span
                   class="text-sm font-normal text-gray-500 dark:text-indigo-200">/ {{ subscriptions.length
                   }}</span></span>
@@ -278,10 +278,10 @@ onMounted(() => {
               </path>
             </svg>
           </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-1">
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">
             {{ isUpdatingAllSubs ? '正在更新...' : '立即更新' }}
           </h3>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+          <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">
             {{ isUpdatingAllSubs ? '正在同步最新节点信息' : '同步所有订阅源的节点信息' }}
           </p>
         </div>
@@ -301,11 +301,11 @@ onMounted(() => {
                 d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" />
             </svg>
           </div>
-          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">节点池</span>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">节点池</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ totalNodeCount }}</h4>
-          <span class="text-sm text-emerald-500 font-medium">{{ activeNodeCount }} 可用</span>
+          <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{{ activeNodeCount }} 可用</span>
         </div>
         <div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mt-3">
           <div class="bg-emerald-500 h-1.5 rounded-full"
@@ -325,11 +325,11 @@ onMounted(() => {
                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
-          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">订阅组</span>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">订阅组</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ profiles.length }}</h4>
-          <span class="text-sm text-purple-500 font-medium">{{ activeProfiles }} 启用</span>
+          <span class="text-xs text-purple-600 dark:text-purple-400 font-medium">{{ activeProfiles }} 启用</span>
         </div>
         <div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mt-3">
           <div class="bg-purple-500 h-1.5 rounded-full"
@@ -348,11 +348,11 @@ onMounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span class="text-gray-600 dark:text-gray-300 font-semibold text-sm">手动节点</span>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">手动节点</span>
         </div>
         <div class="flex items-baseline gap-2">
           <h4 class="text-3xl font-bold text-gray-900 dark:text-white">{{ manualNodes.length }}</h4>
-          <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">个节点</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">个节点</span>
         </div>
         <div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mt-3">
           <div class="bg-orange-500 h-1.5 rounded-full w-full"></div>
@@ -372,7 +372,7 @@ onMounted(() => {
           <p
             class="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
             添加订阅</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">支持 HTTP/HTTPS</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">支持 HTTP/HTTPS</p>
         </div>
       </button>
 
@@ -388,7 +388,7 @@ onMounted(() => {
           <p
             class="font-bold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
             添加节点</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">支持多种协议</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">支持多种协议</p>
         </div>
       </button>
 
@@ -405,7 +405,7 @@ onMounted(() => {
           <p
             class="font-bold text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
             创建订阅组</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">组合订阅和节点</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 font-normal">组合订阅和节点</p>
         </div>
       </button>
 

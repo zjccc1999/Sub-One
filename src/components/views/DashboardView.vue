@@ -746,7 +746,7 @@ const handleSaveSortChanges = async () => {
 // 导出订阅链接功能
 const handleExportNodes = async () => {
   const token = config.value?.mytoken;
-  if (!token || token === 'auto' || !token.trim()) {
+  if (!token || !token.trim()) {
     showToast('请先在设置中配置"默认订阅Token"', 'error');
     return;
   }

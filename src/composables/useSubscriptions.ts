@@ -123,8 +123,8 @@ export function useSubscriptions(initialSubsRef: Ref<Subscription[] | null>) {
             if (updateResult.success) {
               const sub = subsMap.get(updateResult.id);
               if (sub) {
-                if (typeof updateResult.nodeCount === 'number') {
-                  sub.nodeCount = updateResult.nodeCount;
+                if (typeof updateResult.count === 'number') {
+                  sub.nodeCount = updateResult.count;
                 }
                 if (updateResult.userInfo) {
                   sub.userInfo = updateResult.userInfo;

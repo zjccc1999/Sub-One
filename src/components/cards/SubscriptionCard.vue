@@ -191,6 +191,18 @@ const handleTestLatency = async () => {
                 :title="sub.name || '未命名订阅'">
                 {{ sub.name || '未命名订阅' }}
               </p>
+              <!-- 规则过滤提示 -->
+              <div v-if="sub.exclude && sub.exclude.trim()"
+                class="flex items-center gap-1.5 mt-1.5 px-2.5 py-1 bg-gradient-to-r from-orange-500/15 to-amber-500/15 dark:from-orange-500/20 dark:to-amber-500/20 rounded-lg border border-orange-300/50 dark:border-orange-500/30 w-fit animate-pulse-slow"
+                :title="`已启用规则过滤: ${sub.exclude}`">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                  class="h-3.5 w-3.5 text-orange-600 dark:text-orange-400 flex-shrink-0" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span class="text-[10px] font-bold text-orange-700 dark:text-orange-300 tracking-wide">规则过滤</span>
+              </div>
             </div>
           </div>
         </div>
@@ -344,3 +356,21 @@ const handleTestLatency = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+</style>

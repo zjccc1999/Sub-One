@@ -20,7 +20,7 @@ const isSaving = ref(false);
 // 默认设置值
 const defaultSettings: AppConfig = {
   FileName: 'Sub-One',
-  subConverter: 'sub.xeton.dev',
+  subConverter: 'api.v1.mk',
   subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
   prependSubName: true,
   mytoken: 'auto',
@@ -222,7 +222,7 @@ watch(() => props.show, (newValue) => {
               <label for="subConverter"
                 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">后端地址</label>
               <input type="text" id="subConverter" v-model="settings.subConverter" class="input-modern-enhanced w-full"
-                placeholder="例如：sub.xeton.dev">
+                placeholder="例如：api.v1.mk">
             </div>
             <div class="group">
               <label for="subConfig"

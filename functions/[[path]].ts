@@ -73,7 +73,7 @@ const defaultSettings = {
     FileName: 'Sub-One',
     mytoken: 'auto',
     profileToken: '',  // 默认为空，用户需主动设置
-    subConverter: 'sub.xeton.dev',  // 更可靠的后端，支持 Reality
+    subConverter: 'api.v1.mk',  // 更可靠的后端，支持 Reality
     subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
     prependSubName: true,
     NotifyThresholdDays: 3,
@@ -1523,7 +1523,7 @@ class SubscriptionParser {
         } catch (e) {
             console.warn('extractName failed for link:', link, e);
         }
-        
+
         return '未知节点';
     }
 
@@ -1804,6 +1804,54 @@ async function handleSubRequest(context: EventContext<Env, any, any>) {
         }
         const headers = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
         return new Response(btoa(unescape(encodeURIComponent(contentToEncode))), { headers });
+    }
+
+    // 智能检测：如果内容已经是 Clash YAML 格式，直接返回，跳过订阅转换器
+    // 这样可以避免转换器丢失关键配置（如 VMess 的 servername 等）
+    if (targetFormat === 'clash') {
+        const isClashYAML = (content: string): boolean => {
+            const trimmed = content.trim();
+            // 检测典型的 Clash YAML 结构
+            const hasProxies = /^proxies:\s*$/m.test(trimmed) || /\nproxies:\s*$/m.test(trimmed);
+            const hasProxyGroups = /^proxy-groups:\s*$/m.test(trimmed) || /\nproxy-groups:\s*$/m.test(trimmed);
+            const hasRules = /^rules:\s*$/m.test(trimmed) || /\nrules:\s*$/m.test(trimmed);
+
+            // 至少要有 proxies 和 (proxy-groups 或 rules) 其中之一
+            return hasProxies && (hasProxyGroups || hasRules);
+        };
+
+        if (isClashYAML(combinedNodeList)) {
+            console.log('✅ Detected Clash YAML format, skipping converter to preserve original config');
+
+            // 生成 userinfo 头（流量信息）
+            const totalUpload = targetSubs.reduce((sum, sub) => sum + (sub.userInfo?.upload || 0), 0);
+            const totalDownload = targetSubs.reduce((sum, sub) => sum + (sub.userInfo?.download || 0), 0);
+            const totalBytes = targetSubs.reduce((sum, sub) => sum + (sub.userInfo?.total || 0), 0);
+            const earliestExpire = targetSubs.reduce((earliest, sub) => {
+                if (!sub.userInfo?.expire) return earliest;
+                return earliest === 0 ? sub.userInfo.expire : Math.min(earliest, sub.userInfo.expire);
+            }, 0);
+
+            let userinfo = '';
+            if (totalUpload > 0 || totalDownload > 0 || totalBytes > 0) {
+                userinfo = `upload=${totalUpload}; download=${totalDownload}; total=${totalBytes}`;
+                if (earliestExpire > 0) {
+                    userinfo += `; expire=${earliestExpire}`;
+                }
+            }
+
+            const headers: Record<string, string> = {
+                'Content-Type': 'text/yaml; charset=utf-8',
+                'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(subName)}.yaml`,
+                'Cache-Control': 'no-store, no-cache'
+            };
+
+            if (userinfo) {
+                headers['Subscription-Userinfo'] = userinfo;
+            }
+
+            return new Response(combinedNodeList, { headers });
+        }
     }
 
     const base64Content = btoa(unescape(encodeURIComponent(combinedNodeList)));

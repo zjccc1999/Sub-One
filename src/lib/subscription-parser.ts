@@ -550,40 +550,81 @@ export class SubscriptionParser {
    */
   extractNodeNameFromUrl(url: string) {
     try {
+      // 1. 优先检查 # 后面的名称
+      const hashIndex = url.indexOf('#');
+      if (hashIndex !== -1 && hashIndex < url.length - 1) {
+        try {
+          const name = decodeURIComponent(url.substring(hashIndex + 1)).trim();
+          if (name) return name;
+        } catch (e) {
+          // 解码失败时继续其他方法
+        }
+      }
+
       const protocol = url.match(this._protocolRegex)?.[1] || '';
 
-      // 优化：使用Map提升性能，避免switch语句
+      // 2. 根据协议特殊处理
       const protocolHandlers = new Map([
         ['vmess', () => {
           try {
             const vmessContent = url.substring('vmess://'.length);
             const decoded = this.decodeBase64(vmessContent);
             const vmessConfig = JSON.parse(decoded);
-            return vmessConfig.ps || vmessConfig.add || 'VMess节点';
+            return vmessConfig.ps || vmessConfig.add || 'VMess';
           } catch {
             return 'VMess节点';
           }
         }],
         ['vless', () => {
-          const vlessMatch = url.match(/vless:\/\/([^@]+)@([^:]+):(\d+)/);
-          return vlessMatch ? vlessMatch[2] : 'VLESS节点';
+          // 改进正则：匹配到第一个冒号、问号或井号
+          const vlessMatch = url.match(/vless:\/\/[^@]+@([^:?#]+)/);
+          return vlessMatch ? vlessMatch[1] : 'VLESS节点';
         }],
         ['trojan', () => {
-          const trojanMatch = url.match(/trojan:\/\/([^@]+)@([^:]+):(\d+)/);
-          return trojanMatch ? trojanMatch[2] : 'Trojan节点';
+          const trojanMatch = url.match(/trojan:\/\/[^@]+@([^:?#]+)/);
+          return trojanMatch ? trojanMatch[1] : 'Trojan节点';
         }],
         ['ss', () => {
           try {
+            // 尝试提取 @server 部分
+            const atMatch = url.match(/@([^:?#]+)/);
+            if (atMatch) return atMatch[1];
+
+            // 如果没有 @，可能是 SIP002 格式，需要解码
             const ssMatch = url.match(/ss:\/\/([^#]+)/);
             if (ssMatch) {
               const decoded = this.decodeBase64(ssMatch[1]);
-              const [, server] = decoded.split('@');
-              return server.split(':')[0] || 'SS节点';
+              const serverMatch = decoded.match(/@([^:]+)/);
+              if (serverMatch) return serverMatch[1];
             }
           } catch {
             return 'SS节点';
           }
           return 'SS节点';
+        }],
+        ['hysteria', () => {
+          const match = url.match(/hysteria:\/\/([^:?#]+)/);
+          return match ? match[1] : 'Hysteria节点';
+        }],
+        ['hysteria2', () => {
+          const match = url.match(/hysteria2:\/\/([^:?#]+)/);
+          return match ? match[1] : 'Hysteria2节点';
+        }],
+        ['hy', () => {
+          const match = url.match(/hy:\/\/([^:?#]+)/);
+          return match ? match[1] : 'Hysteria节点';
+        }],
+        ['hy2', () => {
+          const match = url.match(/hy2:\/\/([^:?#]+)/);
+          return match ? match[1] : 'Hysteria2节点';
+        }],
+        ['tuic', () => {
+          const match = url.match(/tuic:\/\/[^@]+@([^:?#]+)/);
+          return match ? match[1] : 'TUIC节点';
+        }],
+        ['socks5', () => {
+          const match = url.match(/socks5:\/\/(?:[^@]+@)?([^:?#]+)/);
+          return match ? match[1] : 'Socks5节点';
         }]
       ]);
 
@@ -592,9 +633,19 @@ export class SubscriptionParser {
         return handler();
       }
 
-      // 默认处理
-      const urlObj = new URL(url);
-      return urlObj.hostname || '未命名节点';
+      // 3. 默认：尝试从服务器地址提取
+      try {
+        const match = url.match(/@([^:?#]+)/);
+        if (match) return match[1];
+      } catch { }
+
+      // 4. 最后尝试使用 URL 对象解析
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname || '未命名节点';
+      } catch { }
+
+      return '未命名节点';
     } catch {
       return '未命名节点';
     }

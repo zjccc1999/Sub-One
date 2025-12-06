@@ -1446,15 +1446,85 @@ class SubscriptionParser {
 
     extractName(link: any) {
         try {
+            // 1. 优先从 # 后提取名称
             const hashIndex = link.lastIndexOf('#');
-            if (hashIndex !== -1) return decodeURIComponent(link.substring(hashIndex + 1));
-            // 特殊处理 vmess
-            if (link.startsWith('vmess://')) {
-                const config = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(link.substring(8)), c => c.charCodeAt(0))));
-                return config.ps || '';
+            if (hashIndex !== -1 && hashIndex < link.length - 1) {
+                const name = decodeURIComponent(link.substring(hashIndex + 1));
+                if (name.trim()) return name.trim();
             }
-        } catch (e) { }
-        return '';
+
+            // 2. 根据协议特殊处理
+            // VMess: 从 JSON 配置中提取
+            if (link.startsWith('vmess://')) {
+                const base64Part = link.substring(8);
+                const config = JSON.parse(
+                    new TextDecoder().decode(
+                        Uint8Array.from(atob(base64Part), c => c.charCodeAt(0))
+                    )
+                );
+                return config.ps || config.add || 'VMess';
+            }
+
+            // VLESS: vless://uuid@server:port
+            if (link.startsWith('vless://')) {
+                const match = link.match(/vless:\/\/[^@]+@([^:?#]+)/);
+                if (match) return match[1];
+            }
+
+            // Trojan: trojan://password@server:port
+            if (link.startsWith('trojan://')) {
+                const match = link.match(/trojan:\/\/[^@]+@([^:?#]+)/);
+                if (match) return match[1];
+            }
+
+            // Shadowsocks: ss://base64(method:password)@server:port
+            if (link.startsWith('ss://')) {
+                try {
+                    // 尝试提取 @server 部分
+                    const atMatch = link.match(/@([^:?#]+)/);
+                    if (atMatch) return atMatch[1];
+
+                    // 如果没有 @，可能是 SIP002 格式，需要解码
+                    const base64Match = link.match(/ss:\/\/([^#]+)/);
+                    if (base64Match) {
+                        const decoded = atob(base64Match[1]);
+                        const serverMatch = decoded.match(/@([^:]+)/);
+                        if (serverMatch) return serverMatch[1];
+                    }
+                } catch (e) {
+                    // Base64 解码失败，降级到默认
+                }
+            }
+
+            // Hysteria/Hysteria2: hysteria(2)://server:port 或 hy(2)://server:port
+            if (link.match(/^(hysteria2?|hy2?):\/\//)) {
+                const match = link.match(/^(?:hysteria2?|hy2?):\/\/([^:?#]+)/);
+                if (match) return match[1];
+            }
+
+            // TUIC: tuic://uuid:password@server:port
+            if (link.startsWith('tuic://')) {
+                const match = link.match(/tuic:\/\/[^@]+@([^:?#]+)/);
+                if (match) return match[1];
+            }
+
+            // Socks5: socks5://[user:pass@]server:port
+            if (link.startsWith('socks5://')) {
+                const match = link.match(/socks5:\/\/(?:[^@]+@)?([^:?#]+)/);
+                if (match) return match[1];
+            }
+
+            // 3. 默认：返回协议名作为标识
+            const protocolMatch = link.match(/^([^:]+):/);
+            if (protocolMatch) {
+                return protocolMatch[1].toUpperCase() + ' 节点';
+            }
+
+        } catch (e) {
+            console.warn('extractName failed for link:', link, e);
+        }
+        
+        return '未知节点';
     }
 
     prependName(link: any, prefix: any) {

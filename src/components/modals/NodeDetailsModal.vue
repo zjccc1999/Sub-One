@@ -149,14 +149,9 @@ const fetchProfileNodes = async () => {
 
             if (response.ok) {
               const content = await response.text();
-              console.log(`[NodeDetails] Parsing sub: ${subscription.name}, Exclude: "${subscription.exclude}"`);
               const parsedNodes = subscriptionParser.parse(content, subscription.name);
-              // Apply filtering
-              const processedNodes = subscriptionParser.processNodes(parsedNodes, subscription.name || '', {
-                exclude: (subscription as any).exclude
-              });
               // 标记来源，方便显示
-              return processedNodes.map(node => ({
+              return parsedNodes.map(node => ({
                 id: node.id,
                 name: node.name,
                 url: node.url,

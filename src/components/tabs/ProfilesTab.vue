@@ -53,7 +53,9 @@ const selectAll = () => {
   props.paginatedProfiles.forEach(profile => selectedProfileIds.value.add(profile.id));
 };
 
-
+const deselectAll = () => {
+  selectedProfileIds.value.clear();
+};
 
 const invertSelection = () => {
   props.paginatedProfiles.forEach(profile => {
@@ -148,7 +150,10 @@ onUnmounted(() => {
               class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
               反选
             </button>
-
+            <button @click="deselectAll"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              清空选择
+            </button>
             <button @click="deleteSelected" :disabled="selectedCount === 0"
               class="btn-modern-enhanced btn-danger text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -181,7 +186,7 @@ onUnmounted(() => {
         <span class="hidden xs:inline ml-1">上一页</span></button>
       <span
         class="min-w-[80px] sm:min-w-[100px] text-center text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">第{{
-          profilesCurrentPage }}/{{ profilesTotalPages }}页</span>
+        profilesCurrentPage }}/{{ profilesTotalPages }}页</span>
       <button @click="$emit('change-page', profilesCurrentPage + 1)"
         :disabled="profilesCurrentPage === profilesTotalPages"
         class="min-w-[70px] sm:min-w-[100px] px-3 py-2 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors hover-lift font-medium text-sm sm:text-base flex items-center justify-center"><span

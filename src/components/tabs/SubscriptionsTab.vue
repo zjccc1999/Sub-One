@@ -69,7 +69,9 @@ const selectAll = () => {
   currentPageIds.forEach(id => selectedSubIds.value.add(id));
 };
 
-
+const deselectAll = () => {
+  selectedSubIds.value.clear();
+};
 
 const invertSelection = () => {
   const currentPageIds = props.isSortingSubs
@@ -207,7 +209,10 @@ const handleDragEnd = (evt: any) => {
               class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
               反选
             </button>
-
+            <button @click="deselectAll"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              清空选择
+            </button>
             <button @click="deleteSelected" :disabled="selectedCount === 0"
               class="btn-modern-enhanced btn-danger text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

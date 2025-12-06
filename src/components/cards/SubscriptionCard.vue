@@ -187,23 +187,10 @@ const handleTestLatency = async () => {
               </svg>
             </div>
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 w-full">
-                <p class="font-bold text-lg text-gray-800 dark:text-gray-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300"
-                  :title="sub.name || '未命名订阅'">
-                  {{ sub.name || '未命名订阅' }}
-                </p>
-                <!-- 过滤规则指示器 -->
-                <div v-if="sub.exclude"
-                  class="flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1 cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-                  @click.stop="emit('edit')" title="已应用过滤规则，点击编辑">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd"
-                      d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z"
-                      clip-rule="evenodd" />
-                  </svg>
-                  <span>已过滤</span>
-                </div>
-              </div>
+              <p class="font-bold text-lg text-gray-800 dark:text-gray-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors duration-300"
+                :title="sub.name || '未命名订阅'">
+                {{ sub.name || '未命名订阅' }}
+              </p>
             </div>
           </div>
         </div>

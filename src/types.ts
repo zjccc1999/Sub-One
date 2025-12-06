@@ -37,7 +37,6 @@ export interface Profile {
 
 export interface AppConfig {
     profileToken?: string;
-    manualNodeToken?: string;
     [key: string]: any;
 }
 

@@ -30,7 +30,6 @@ const emit = defineEmits<{
   (e: 'delete-node', id: string): void;
   (e: 'change-page', page: number): void;
   (e: 'batch-delete-nodes', ids: string[]): void;
-  (e: 'export-nodes'): void;
 }>();
 
 const showNodesMoreMenu = ref(false);
@@ -76,7 +75,9 @@ const selectAll = () => {
   currentPageIds.forEach(id => selectedNodeIds.value.add(id));
 };
 
-
+const deselectAll = () => {
+  selectedNodeIds.value.clear();
+};
 
 const invertSelection = () => {
   const currentPageIds = props.isSortingNodes
@@ -184,8 +185,6 @@ const handleDragEnd = (evt: any) => {
                 class="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-50 ring-2 ring-gray-200 dark:ring-gray-700 border border-gray-200 dark:border-gray-700">
                 <button @click="$emit('import-subs'); showNodesMoreMenu = false"
                   class="w-full text-left px-5 py-3 text-base text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-colors">导入订阅</button>
-                <button @click="$emit('export-nodes'); showNodesMoreMenu = false"
-                  class="w-full text-left px-5 py-3 text-base text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-colors">导出订阅</button>
                 <button @click="$emit('auto-sort'); showNodesMoreMenu = false"
                   class="w-full text-left px-5 py-3 text-base text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white transition-colors">一键排序</button>
                 <button @click="$emit('deduplicate'); showNodesMoreMenu = false"
@@ -229,7 +228,10 @@ const handleDragEnd = (evt: any) => {
               class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
               反选
             </button>
-
+            <button @click="deselectAll"
+              class="btn-modern-enhanced btn-secondary text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300">
+              清空选择
+            </button>
             <button @click="deleteSelected" :disabled="selectedCount === 0"
               class="btn-modern-enhanced btn-danger text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">

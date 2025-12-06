@@ -72,7 +72,6 @@ async function conditionalKVPut(env: Env, key: string, newData: any, oldData: an
 const defaultSettings = {
     FileName: 'Sub-One',
     mytoken: 'auto',
-    manualNodeToken: '', // 默认为空
     profileToken: '',  // 默认为空，用户需主动设置
     subConverter: 'sub.xeton.dev',  // 更可靠的后端，支持 Reality
     subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
@@ -363,7 +362,6 @@ async function handleApiRequest(request: Request, env: Env) {
                 const config = {
                     FileName: settings.FileName || 'SUB_ONE',
                     mytoken: settings.mytoken || 'auto',
-                    manualNodeToken: settings.manualNodeToken || '', // 默认为空
                     profileToken: settings.profileToken || ''  // 默认为空
                 };
                 return new Response(JSON.stringify({ subs, profiles, config }), { headers: { 'Content-Type': 'application/json' } });
@@ -578,7 +576,7 @@ async function handleApiRequest(request: Request, env: Env) {
 
             try {
                 const response = await fetch(new Request(externalUrl, {
-                    headers: { 'User-Agent': 'Clash for Windows/0.20.39' }, // Use a standard client UA
+                    headers: { 'User-Agent': 'Sub-One-Proxy/1.0' }, // Identify as proxy
                     redirect: "follow",
                     cf: { insecureSkipVerify: true } // Allow insecure SSL for flexibility
                 } as any));
@@ -1622,14 +1620,10 @@ async function handleSubRequest(context: EventContext<Env, any, any>) {
             return new Response('Profile not found or disabled', { status: 404 });
         }
     } else {
-        if (token === config.mytoken) {
-            targetSubs = allSubs.filter(s => s.enabled);
-        } else if (config.manualNodeToken && token === config.manualNodeToken) {
-            // 仅返回手动节点
-            targetSubs = allSubs.filter(s => s.enabled && !s.url.toLowerCase().startsWith('http'));
-        } else {
+        if (!token || token !== config.mytoken) {
             return new Response('Invalid Token', { status: 403 });
         }
+        targetSubs = allSubs.filter(s => s.enabled);
         effectiveSubConverter = config.subConverter;
         effectiveSubConfig = config.subConfig;
     }

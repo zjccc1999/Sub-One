@@ -16,38 +16,10 @@ interface ProcessOptions {
   prependSubName?: boolean;
 }
 
-// 增强：Clash 代理配置的类型定义，包含 host 字段兼容
-interface ClashProxy {
-  name: string;
-  type: string;
-  server?: string;
-  host?: string; // 兼容非标准字段
-  port: number | string;
-  uuid?: string;
-  password?: string;
-  cipher?: string;
-  udp?: boolean | number;
-  tls?: boolean;
-  sni?: string;
-  peer?: string; // 兼容 AnyTLS peer 字段
-  network?: string;
-  'client-fingerprint'?: string;
-  allowInsecure?: boolean | number; // 兼容 0/1 或 true/false
-  'skip-cert-verify'?: boolean;
-  'reality-opts'?: {
-    'public-key': string;
-    'short-id': string;
-  };
-  'ws-opts'?: {
-    path?: string;
-    headers?: { Host?: string };
-  };
-  'grpc-opts'?: {
-    'grpc-service-name'?: string;
-  };
-  [key: string]: any;
-}
-
+/**
+ * 强大的订阅解析器
+ * 支持多种格式：Base64、纯文本、YAML、Clash配置等
+ */
 export class SubscriptionParser {
   supportedProtocols: string[];
   _base64Regex: RegExp;
@@ -63,155 +35,201 @@ export class SubscriptionParser {
       'tuic', 'anytls', 'socks5'
     ];
 
+    // 预编译正则表达式，提升性能
     this._base64Regex = /^[A-Za-z0-9+\/=]+$/;
     this._whitespaceRegex = /\s/g;
     this._newlineRegex = /\r?\n/;
-    this._nodeRegex = null;
+    this._nodeRegex = null; // 延迟初始化
     this._protocolRegex = /^(.*?):\/\//;
   }
 
+  /**
+   * 安全解码 Base64 字符串 (支持 UTF-8)
+   */
   decodeBase64(str: string) {
     try {
-      if (typeof Buffer !== 'undefined') {
-        return Buffer.from(str, 'base64').toString('utf8');
-      }
       const binaryString = atob(str);
       const bytes = Uint8Array.from(binaryString, c => c.charCodeAt(0));
       return new TextDecoder('utf-8').decode(bytes);
     } catch (e) {
-      console.warn('Base64 decoding failed, trying permissive mode:', e);
-      try { return atob(str); } catch (e2) { return str; }
+      console.warn('Base64 decoding failed:', e);
+      return atob(str); // Fallback to standard atob
     }
   }
 
-  encodeBase64(str: string) {
-    try {
-      if (typeof Buffer !== 'undefined') {
-        return Buffer.from(str, 'utf8').toString('base64');
-      }
-      const bytes = new TextEncoder().encode(str);
-      const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
-      return btoa(binString);
-    } catch (e) {
-      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
-        return String.fromCharCode(parseInt(p1, 16));
-      }));
-    }
-  }
-
+  /**
+   * 解析订阅内容
+   * @param {string} content - 订阅内容
+   * @param {string} subscriptionName - 订阅名称
+   * @returns {Array} 解析后的节点列表
+   */
   parse(content: string, subscriptionName = ''): Node[] {
-    if (!content || typeof content !== 'string') return [];
+    if (!content || typeof content !== 'string') {
+      return [];
+    }
 
+    // 根据内容特征选择最合适的解析方法，避免不必要的尝试
     let methods: (() => Node[])[] = [];
 
-    // 1. 优先检测 YAML (包含 proxies/nodes 关键字)
-    if (content.includes('proxies:') || content.includes('nodes:') || content.includes('"type":')) {
-      methods.push(() => this.parseYAML(content, subscriptionName));
-      methods.push(() => this.parseClashConfig(content, subscriptionName));
-    }
-
-    // 2. Base64 检测
+    // 检查是否为Base64编码
     const cleanedContent = content.replace(this._whitespaceRegex, '');
     if (this._base64Regex.test(cleanedContent) && cleanedContent.length > 20) {
       methods.push(() => this.parseBase64(content, subscriptionName));
     }
 
-    // 3. 纯文本
+    // 检查是否为YAML格式
+    if (content.includes('proxies:') || content.includes('nodes:')) {
+      methods.push(() => this.parseYAML(content, subscriptionName));
+      methods.push(() => this.parseClashConfig(content, subscriptionName));
+    }
+
+    // 最后尝试纯文本解析
     methods.push(() => this.parsePlainText(content, subscriptionName));
 
     for (const method of methods) {
       try {
         const result = method();
         if (result && result.length > 0) {
-          console.log(`解析成功，找到 ${result.length} 个节点`);
+          console.log(`解析成功，使用 ${method.name} 方法，找到 ${result.length} 个节点`);
           return result;
         }
-      } catch (error) { continue; }
+      } catch (error) {
+        console.warn(`解析方法 ${method.name} 失败:`, error);
+        continue;
+      }
     }
+
     return [];
   }
 
+  /**
+   * 解析Base64编码的内容
+   */
   parseBase64(content: string, subscriptionName: string): Node[] {
     const cleanedContent = content.replace(this._whitespaceRegex, '');
+
+    // 检查是否为Base64编码
+    if (!this._base64Regex.test(cleanedContent) || cleanedContent.length < 20) {
+      throw new Error('不是有效的Base64编码');
+    }
+
     try {
       const decodedContent = this.decodeBase64(cleanedContent);
+      // 优化：使用更高效的换行符分割
       const decodedLines = decodedContent.split(this._newlineRegex).filter(line => line.trim() !== '');
-      // 如果解码后是 JSON/YAML 内容，递归调用 parse
-      if (decodedContent.includes('proxies:') || decodedContent.trim().startsWith('{')) {
-         return this.parse(decodedContent, subscriptionName);
+
+      // 检查解码后的内容是否包含节点链接
+      if (!decodedLines.some(line => this.isNodeUrl(line))) {
+        throw new Error('Base64解码后未找到有效的节点链接');
       }
+
       return this.parseNodeLines(decodedLines, subscriptionName);
     } catch (error: any) {
       throw new Error(`Base64解码失败: ${error.message}`);
     }
   }
 
+  /**
+   * 解析YAML格式
+   */
   parseYAML(content: string, subscriptionName: string): Node[] {
     try {
       const parsed: any = yaml.load(content);
-      if (!parsed || typeof parsed !== 'object') throw new Error('无效的YAML/JSON格式');
-
-      // 支持直接解析单个节点对象
-      if (parsed.type && (parsed.server || parsed.host) && parsed.port) {
-         return this.parseClashProxies([parsed], subscriptionName);
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('无效的YAML格式');
       }
 
+      // 检查是否为Clash配置
       if (parsed.proxies && Array.isArray(parsed.proxies)) {
         return this.parseClashProxies(parsed.proxies, subscriptionName);
       }
+
+      // 检查是否为其他YAML格式
       if (parsed.nodes && Array.isArray(parsed.nodes)) {
         return this.parseGenericNodes(parsed.nodes, subscriptionName);
       }
+
       throw new Error('不支持的YAML格式');
     } catch (error: any) {
       throw new Error(`YAML解析失败: ${error.message}`);
     }
   }
 
+  /**
+   * 解析Clash配置文件
+   */
   parseClashConfig(content: string, subscriptionName: string): Node[] {
-    return this.parseYAML(content, subscriptionName);
+    try {
+      const parsed: any = yaml.load(content);
+      if (!parsed || !parsed.proxies || !Array.isArray(parsed.proxies)) {
+        throw new Error('不是有效的Clash配置');
+      }
+
+      return this.parseClashProxies(parsed.proxies, subscriptionName);
+    } catch (error: any) {
+      throw new Error(`Clash配置解析失败: ${error.message}`);
+    }
   }
 
+  /**
+   * 解析纯文本格式
+   */
   parsePlainText(content: string, subscriptionName: string): Node[] {
     const lines = content.split(this._newlineRegex).filter(line => line.trim() !== '');
     const nodeLines = lines.filter(line => this.isNodeUrl(line));
-    if (nodeLines.length === 0) throw new Error('未找到有效的节点链接');
+
+    if (nodeLines.length === 0) {
+      throw new Error('未找到有效的节点链接');
+    }
+
     return this.parseNodeLines(nodeLines, subscriptionName);
   }
 
+  /**
+   * 解析Clash代理配置
+   */
   parseClashProxies(proxies: any[], subscriptionName: string): Node[] {
     const nodes: Node[] = [];
+
     for (const proxy of proxies) {
       if (!proxy || typeof proxy !== 'object') continue;
+
       try {
         const nodeUrl = this.convertClashProxyToUrl(proxy);
         if (nodeUrl) {
           nodes.push({
             id: crypto.randomUUID(),
-            name: proxy.name || proxy.title || '未命名节点', // 兼容 title 字段
+            name: proxy.name || '未命名节点',
             url: nodeUrl,
             protocol: proxy.type?.toLowerCase() || 'unknown',
             enabled: true,
             type: 'subscription',
             subscriptionName: subscriptionName,
-            originalProxy: proxy
+            originalProxy: proxy // 保留原始配置
           });
         }
       } catch (error) {
-        console.warn(`解析代理配置失败: ${proxy.name}`, error);
+        console.warn(`解析代理配置失败:`, proxy, error);
+        continue;
       }
     }
+
     return nodes;
   }
 
-  convertClashProxyToUrl(proxy: ClashProxy) {
+  /**
+   * 将Clash代理配置转换为节点URL
+   */
+  convertClashProxyToUrl(proxy: any) {
     const type = proxy.type?.toLowerCase();
-    // 关键修复：兼容 host 字段作为 server
-    const server = proxy.server || proxy.host;
+    const server = proxy.server;
     const port = proxy.port;
 
-    if (!server || !port) return null;
+    if (!server || !port) {
+      return null;
+    }
 
+    // 优化：使用Map提升性能，避免switch语句
     const proxyTypeHandlers = new Map([
       ['vmess', () => this.buildVmessUrl(proxy)],
       ['vless', () => this.buildVlessUrl(proxy)],
@@ -221,56 +239,26 @@ export class SubscriptionParser {
       ['hysteria', () => this.buildHysteriaUrl(proxy)],
       ['hysteria2', () => this.buildHysteriaUrl(proxy)],
       ['tuic', () => this.buildTUICUrl(proxy)],
-      ['anytls', () => this.buildAnyTLSUrl(proxy)], // 新增 AnyTLS
       ['socks5', () => this.buildSocks5Url(proxy)]
     ]);
 
     const handler = proxyTypeHandlers.get(type);
-    return handler ? handler() : null;
+    if (handler) {
+      return handler();
+    }
+
+    console.warn(`不支持的代理类型: ${type}`);
+    return null;
   }
 
-  // --- 新增：AnyTLS URL 构建方法 ---
-  buildAnyTLSUrl(proxy: ClashProxy) {
-    const params = new URLSearchParams();
-    
-    // 映射 allowInsecure/skip-cert-verify -> insecure
-    if (proxy.allowInsecure || proxy['skip-cert-verify']) {
-        params.set('insecure', '1');
-    }
-    
-    // 映射 peer -> sni
-    if (proxy.peer || proxy.sni) {
-        params.set('sni', proxy.peer || proxy.sni);
-    }
-
-    // 构建认证部分 (uuid:password)
-    let userInfo = '';
-    if (proxy.uuid && proxy.password) {
-        userInfo = `${proxy.uuid}:${proxy.password}`;
-    } else if (proxy.password) {
-        userInfo = proxy.password;
-    } else if (proxy.uuid) {
-        userInfo = proxy.uuid;
-    }
-
-    const address = `${proxy.server || proxy.host}:${proxy.port}`;
-    const hash = encodeURIComponent(proxy.name || proxy.title || 'AnyTLS节点');
-
-    // 格式：anytls://userInfo@host:port?params#name
-    let url = `anytls://`;
-    if (userInfo) url += `${userInfo}@`;
-    url += `${address}`;
-    if (params.toString()) url += `?${params.toString()}`;
-    url += `#${hash}`;
-
-    return url;
-  }
-
-  buildVmessUrl(proxy: ClashProxy) {
+  /**
+   * 构建VMess URL
+   */
+  buildVmessUrl(proxy: any) {
     const config = {
       v: '2',
       ps: proxy.name || 'VMess节点',
-      add: proxy.server || proxy.host,
+      add: proxy.server,
       port: proxy.port,
       id: proxy.uuid,
       aid: proxy.alterId || 0,
@@ -278,116 +266,224 @@ export class SubscriptionParser {
       type: proxy.type || 'none',
       host: proxy['ws-opts']?.headers?.Host || proxy.host || '',
       path: proxy['ws-opts']?.path || proxy.path || '',
-      tls: proxy.tls ? 'tls' : 'none'
+      tls: proxy.tls || 'none'
     };
+
     const jsonStr = JSON.stringify(config);
-    const base64 = this.encodeBase64(jsonStr);
+    const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
     return `vmess://${base64}`;
   }
 
-  buildVlessUrl(proxy: ClashProxy) {
-    const params = new URLSearchParams();
-    params.set('security', proxy.tls ? 'tls' : 'none');
-    
-    const network = proxy.network || 'tcp';
-    params.set('type', network);
+  /**
+   * 构建VLESS URL
+   */
+  buildVlessUrl(proxy: any) {
+    let url = `vless://${proxy.uuid}@${proxy.server}:${proxy.port}`;
 
-    if (network === 'ws') {
-      if (proxy['ws-opts']?.path) params.set('path', proxy['ws-opts'].path);
-      if (proxy['ws-opts']?.headers?.Host) params.set('host', proxy['ws-opts'].headers.Host);
-    } else if (network === 'grpc') {
-      if (proxy['grpc-opts']?.['grpc-service-name']) params.set('serviceName', proxy['grpc-opts']['grpc-service-name']);
+    // 优化：使用数组构建查询参数，提升性能
+    const queryParams = [];
+
+    // 添加传输参数
+    if (proxy.network && proxy.network !== 'tcp') {
+      queryParams.push(`type=${proxy.network}`);
+
+      if (proxy.network === 'ws') {
+        if (proxy['ws-opts']?.path) {
+          queryParams.push(`path=${encodeURIComponent(proxy['ws-opts'].path)}`);
+        }
+        if (proxy['ws-opts']?.headers?.Host) {
+          queryParams.push(`host=${proxy['ws-opts'].headers.Host}`);
+        }
+      }
     }
 
-    if (proxy['reality-opts'] || (proxy['client-fingerprint'] && proxy.tls)) {
-       params.set('security', 'reality');
-       if (proxy['reality-opts']?.['public-key']) params.set('pbk', proxy['reality-opts']['public-key']);
-       if (proxy['reality-opts']?.['short-id']) params.set('sid', proxy['reality-opts']['short-id']);
-       if (proxy.flow) params.set('flow', proxy.flow);
+    // 添加TLS参数
+    if (proxy.tls === 'tls') {
+      queryParams.push('security=tls');
+      if (proxy.sni) {
+        queryParams.push(`sni=${proxy.sni}`);
+      }
     }
-    
-    if (proxy['client-fingerprint']) params.set('fp', proxy['client-fingerprint']);
-    if (proxy.sni || proxy.servername) params.set('sni', proxy.sni || proxy.servername);
 
-    const userInfo = proxy.uuid;
-    const address = `${proxy.server || proxy.host}:${proxy.port}`;
-    const hash = encodeURIComponent(proxy.name || 'VLESS节点');
+    // 构建最终URL
+    if (queryParams.length > 0) {
+      url += `?${queryParams.join('&')}`;
+    }
 
-    return `vless://${userInfo}@${address}?${params.toString()}#${hash}`;
+    // 添加名称
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
-  buildTrojanUrl(proxy: ClashProxy) {
-    const params = new URLSearchParams();
-    if (proxy.sni || proxy.peer) params.set('sni', proxy.sni || proxy.peer);
-    if (proxy.network === 'ws') params.set('type', 'ws');
-    if (proxy['ws-opts']?.path) params.set('path', proxy['ws-opts'].path);
-    if (proxy['ws-opts']?.headers?.Host) params.set('host', proxy['ws-opts'].headers.Host);
-    if (proxy.allowInsecure) params.set('allowInsecure', '1');
+  /**
+   * 构建Trojan URL
+   */
+  buildTrojanUrl(proxy: any) {
+    let url = `trojan://${proxy.password}@${proxy.server}:${proxy.port}`;
 
-    const userInfo = proxy.password;
-    const address = `${proxy.server || proxy.host}:${proxy.port}`;
-    const hash = encodeURIComponent(proxy.name || 'Trojan节点');
+    if (proxy.sni) {
+      url += `?sni=${proxy.sni}`;
+    }
 
-    return `trojan://${userInfo}@${address}?${params.toString()}#${hash}`;
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
-  buildShadowsocksUrl(proxy: ClashProxy) {
-    const auth = `${proxy.cipher}:${proxy.password}`;
-    const base64 = this.encodeBase64(auth);
-    const hash = encodeURIComponent(proxy.name || 'SS节点');
-    return `ss://${base64}@${proxy.server || proxy.host}:${proxy.port}#${hash}`;
+  /**
+   * 构建Shadowsocks URL
+   */
+  buildShadowsocksUrl(proxy: any) {
+    const method = proxy.cipher;
+    const password = proxy.password;
+    const server = proxy.server;
+    const port = proxy.port;
+
+    const auth = `${method}:${password}@${server}:${port}`;
+    const base64 = btoa(auth);
+    let url = `ss://${base64}`;
+
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
-  buildShadowsocksRUrl(proxy: ClashProxy) {
-    const configStr = [
-      proxy.server || proxy.host,
+  /**
+   * 构建ShadowsocksR URL
+   */
+  buildShadowsocksRUrl(proxy: any) {
+    // SSR URL格式比较复杂，这里提供基础实现
+    // 优化：使用数组构建配置，提升性能
+    const config = [
+      proxy.server,
       proxy.port,
       proxy.protocol || 'origin',
       proxy.cipher,
       proxy.obfs || 'plain',
-      this.encodeBase64(proxy.password || '')
-    ].join(':');
+      btoa(proxy.password)
+    ];
+
+    // 优化：使用URLSearchParams构建查询参数
     const query = new URLSearchParams();
-    if (proxy['protocol-param']) query.set('protoparam', this.encodeBase64(proxy['protocol-param']));
-    if (proxy['obfs-param']) query.set('obfsparam', this.encodeBase64(proxy['obfs-param']));
-    if (proxy.name) query.set('remarks', this.encodeBase64(proxy.name));
-    return `ssr://${this.encodeBase64(configStr)}/?${query.toString()}`;
+
+    // 批量设置参数，减少条件判断
+    const params: [string, any][] = [
+      ['protoparam', proxy['protocol-param']],
+      ['obfsparam', proxy['obfs-param']],
+      ['remarks', proxy.name]
+    ];
+
+    params.forEach(([key, value]) => {
+      if (value) {
+        query.set(key, btoa(value));
+      }
+    });
+
+    const base64 = btoa(config.join(':'));
+    let url = `ssr://${base64}`;
+
+    if (query.toString()) {
+      url += `/?${query.toString()}`;
+    }
+
+    return url;
   }
 
-  buildHysteriaUrl(proxy: ClashProxy) {
+  /**
+   * 构建Hysteria URL
+   */
+  buildHysteriaUrl(proxy: any) {
+    let url = `hysteria://${proxy.server}:${proxy.port}`;
+
+    // 优化：使用数组构建参数，提升性能
     const params = new URLSearchParams();
-    if (proxy.protocol) params.set('protocol', proxy.protocol);
-    if (proxy.sni || proxy.peer) params.set('sni', proxy.sni || proxy.peer);
-    if (proxy.auth || proxy.password) params.set('auth', proxy.auth || proxy.password);
-    if (proxy.alpn) params.set('alpn', Array.isArray(proxy.alpn) ? proxy.alpn.join(',') : proxy.alpn);
-    if (proxy.up) params.set('up', proxy.up);
-    if (proxy.down) params.set('down', proxy.down);
-    if (proxy['skip-cert-verify'] || proxy.allowInsecure) params.set('insecure', '1');
 
-    const address = `${proxy.server || proxy.host}:${proxy.port}`;
-    const hash = encodeURIComponent(proxy.name || 'Hysteria节点');
-    const scheme = (proxy.type === 'hysteria2') ? 'hysteria2' : 'hysteria';
-    return `${scheme}://${address}?${params.toString()}#${hash}`;
+    // 批量设置参数，减少条件判断
+    const paramPairs: [string, any][] = [
+      ['protocol', proxy.protocol],
+      ['sni', proxy.sni],
+      ['auth', proxy.auth],
+      ['alpn', proxy.alpn]
+    ];
+
+    paramPairs.forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
+
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
-  buildTUICUrl(proxy: ClashProxy) {
+  /**
+   * 构建TUIC URL
+   */
+  buildTUICUrl(proxy: any) {
+    let url = `tuic://${proxy.uuid}:${proxy.password}@${proxy.server}:${proxy.port}`;
+
+    // 优化：使用数组构建参数，提升性能
     const params = new URLSearchParams();
-    if (proxy.sni) params.set('sni', proxy.sni);
-    if (proxy.alpn) params.set('alpn', Array.isArray(proxy.alpn) ? proxy.alpn.join(',') : proxy.alpn);
-    if (proxy['skip-cert-verify']) params.set('insecure', '1');
-    const userInfo = `${proxy.uuid}:${proxy.password}`;
-    const address = `${proxy.server || proxy.host}:${proxy.port}`;
-    const hash = encodeURIComponent(proxy.name || 'TUIC节点');
-    return `tuic://${userInfo}@${address}?${params.toString()}#${hash}`;
+
+    // 批量设置参数，减少条件判断
+    const paramPairs: [string, any][] = [
+      ['sni', proxy.sni],
+      ['alpn', proxy.alpn]
+    ];
+
+    paramPairs.forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
+
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
-  buildSocks5Url(proxy: ClashProxy) {
-    let auth = '';
-    if (proxy.username && proxy.password) auth = `${proxy.username}:${proxy.password}@`;
-    const hash = encodeURIComponent(proxy.name || 'Socks5节点');
-    return `socks5://${auth}${proxy.server || proxy.host}:${proxy.port}#${hash}`;
+  /**
+   * 构建Socks5 URL
+   */
+  buildSocks5Url(proxy: any) {
+    let url = `socks5://`;
+
+    if (proxy.username && proxy.password) {
+      url += `${proxy.username}:${proxy.password}@`;
+    }
+
+    url += `${proxy.server}:${proxy.port}`;
+
+    if (proxy.name) {
+      url += `#${encodeURIComponent(proxy.name)}`;
+    }
+
+    return url;
   }
 
+  /**
+   * 解析通用节点格式
+   */
   parseGenericNodes(nodes: any[], subscriptionName: string): Node[] {
     return nodes.map(node => ({
       id: crypto.randomUUID(),
@@ -400,6 +496,9 @@ export class SubscriptionParser {
     }));
   }
 
+  /**
+   * 解析节点链接行
+   */
   parseNodeLines(lines: string[], subscriptionName: string): Node[] {
     return lines
       .filter(line => this.isNodeUrl(line))
@@ -407,18 +506,32 @@ export class SubscriptionParser {
       .filter((node): node is Node => node !== null);
   }
 
+  /**
+   * 解析单行节点信息
+   */
   parseNodeLine(line: string, subscriptionName: string): Node | null {
+    // 优化：延迟初始化并缓存正则表达式，避免重复创建
     if (!this._nodeRegex) {
       this._nodeRegex = new RegExp(`^(${this.supportedProtocols.join('|')}):\/\/`);
     }
 
     if (!this._nodeRegex.test(line)) return null;
 
+    // 提取节点名称
     let name = '';
-    const hashIndex = line.lastIndexOf('#');
-    if (hashIndex !== -1) name = decodeURIComponent(line.substring(hashIndex + 1) || '');
-    if (!name) name = this.extractNodeNameFromUrl(line);
 
+    // 优化：使用更高效的字符串分割
+    const hashIndex = line.indexOf('#');
+    if (hashIndex !== -1) {
+      name = decodeURIComponent(line.substring(hashIndex + 1) || '');
+    }
+
+    // 如果没有名称，尝试从URL中提取
+    if (!name) {
+      name = this.extractNodeNameFromUrl(line);
+    }
+
+    // 获取协议类型
     const protocol = line.match(this._nodeRegex)?.[1] || 'unknown';
 
     return {
@@ -432,62 +545,172 @@ export class SubscriptionParser {
     };
   }
 
+  /**
+   * 从URL中提取节点名称
+   */
   extractNodeNameFromUrl(url: string) {
     try {
-      const hashIndex = url.lastIndexOf('#');
-      if (hashIndex > -1) return decodeURIComponent(url.slice(hashIndex + 1));
+      const protocol = url.match(this._protocolRegex)?.[1] || '';
+
+      // 优化：使用Map提升性能，避免switch语句
+      const protocolHandlers = new Map([
+        ['vmess', () => {
+          try {
+            const vmessContent = url.substring('vmess://'.length);
+            const decoded = this.decodeBase64(vmessContent);
+            const vmessConfig = JSON.parse(decoded);
+            return vmessConfig.ps || vmessConfig.add || 'VMess节点';
+          } catch {
+            return 'VMess节点';
+          }
+        }],
+        ['vless', () => {
+          const vlessMatch = url.match(/vless:\/\/([^@]+)@([^:]+):(\d+)/);
+          return vlessMatch ? vlessMatch[2] : 'VLESS节点';
+        }],
+        ['trojan', () => {
+          const trojanMatch = url.match(/trojan:\/\/([^@]+)@([^:]+):(\d+)/);
+          return trojanMatch ? trojanMatch[2] : 'Trojan节点';
+        }],
+        ['ss', () => {
+          try {
+            const ssMatch = url.match(/ss:\/\/([^#]+)/);
+            if (ssMatch) {
+              const decoded = this.decodeBase64(ssMatch[1]);
+              const [, server] = decoded.split('@');
+              return server.split(':')[0] || 'SS节点';
+            }
+          } catch {
+            return 'SS节点';
+          }
+          return 'SS节点';
+        }]
+      ]);
+
+      const handler = protocolHandlers.get(protocol);
+      if (handler) {
+        return handler();
+      }
+
+      // 默认处理
       const urlObj = new URL(url);
-      return urlObj.hostname;
-    } catch { return '未命名节点'; }
+      return urlObj.hostname || '未命名节点';
+    } catch {
+      return '未命名节点';
+    }
   }
 
+  /**
+   * 检查是否为节点URL
+   */
   isNodeUrl(line: string) {
+    // 优化：延迟初始化并缓存正则表达式，避免重复创建
     if (!this._nodeRegex) {
       this._nodeRegex = new RegExp(`^(${this.supportedProtocols.join('|')}):\/\/`);
     }
     return this._nodeRegex.test(line.trim());
   }
 
-  getSupportedProtocols() { return [...this.supportedProtocols]; }
+  /**
+   * 获取支持的协议列表
+   */
+  getSupportedProtocols() {
+    return [...this.supportedProtocols];
+  }
 
+  /**
+   * 验证订阅内容格式
+   */
+  validateContent(content: string) {
+    if (!content || typeof content !== 'string') {
+      return { valid: false, format: 'unknown', error: '内容为空或格式错误' };
+    }
+
+    try {
+      // 检查是否为Base64
+      const cleanedContent = content.replace(this._whitespaceRegex, '');
+      if (this._base64Regex.test(cleanedContent) && cleanedContent.length > 20) {
+        return { valid: true, format: 'base64' };
+      }
+
+      // 检查是否为YAML
+      const parsed: any = yaml.load(content);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.proxies && Array.isArray(parsed.proxies)) {
+          return { valid: true, format: 'clash' };
+        }
+        return { valid: true, format: 'yaml' };
+      }
+
+      // 检查是否为纯文本节点列表
+      const lines = content.split(this._newlineRegex).filter(line => line.trim() !== '');
+      const nodeLines = lines.filter(line => this.isNodeUrl(line));
+      if (nodeLines.length > 0) {
+        return { valid: true, format: 'plain_text' };
+      }
+
+      return { valid: false, format: 'unknown', error: '无法识别的格式' };
+    } catch (error: any) {
+      return { valid: false, format: 'unknown', error: error.message };
+    }
+  }
+  /**
+   * 处理节点：过滤和重命名
+   */
   processNodes(nodes: Node[], subName: string, options: ProcessOptions = {}): Node[] {
     let processed = nodes;
+
+    // 1. 处理 Include/Exclude 规则
     if (options.exclude && options.exclude.trim()) {
       const rules = options.exclude.trim().split('\n').map(r => r.trim()).filter(Boolean);
       const keepRules = rules.filter(r => r.toLowerCase().startsWith('keep:'));
+
       if (keepRules.length > 0) {
+        // 白名单模式
         const nameRegexParts: string[] = [];
         const protocolsToKeep = new Set();
         keepRules.forEach(rule => {
-          const content = rule.substring(5).trim();
+          const content = rule.substring(5).trim(); // 'keep:'.length
           if (content.toLowerCase().startsWith('proto:')) {
             content.substring(6).split(',').forEach(p => protocolsToKeep.add(p.trim().toLowerCase()));
-          } else { nameRegexParts.push(content); }
+          } else {
+            nameRegexParts.push(content);
+          }
         });
         const nameRegex = nameRegexParts.length ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+
         processed = processed.filter(node => {
-            if (protocolsToKeep.has(node.protocol)) return true;
-            return nameRegex ? nameRegex.test(node.name) : false;
+          if (protocolsToKeep.has(node.protocol)) return true;
+          if (nameRegex && nameRegex.test(node.name)) return true;
+          return false;
         });
       } else {
+        // 黑名单模式
         const protocolsToExclude = new Set();
         const nameRegexParts: string[] = [];
         rules.forEach(rule => {
           if (rule.toLowerCase().startsWith('proto:')) {
             rule.substring(6).split(',').forEach(p => protocolsToExclude.add(p.trim().toLowerCase()));
-          } else { nameRegexParts.push(rule); }
+          } else {
+            nameRegexParts.push(rule);
+          }
         });
         const nameRegex = nameRegexParts.length ? new RegExp(nameRegexParts.join('|'), 'i') : null;
+
         processed = processed.filter(node => {
           if (protocolsToExclude.has(node.protocol)) return false;
-          return nameRegex ? !nameRegex.test(node.name) : true;
+          if (nameRegex && nameRegex.test(node.name)) return false;
+          return true;
         });
       }
     }
+
+    // 2. 添加前缀
     if (options.prependSubName && subName) {
       processed = processed.map(node => {
         if (!node.name.startsWith(subName)) {
           node.name = `${subName} - ${node.name}`;
+          // 更新 URL 中的 hash
           const hashIndex = node.url.lastIndexOf('#');
           const baseUrl = hashIndex !== -1 ? node.url.substring(0, hashIndex) : node.url;
           node.url = `${baseUrl}#${encodeURIComponent(node.name)}`;
@@ -495,8 +718,10 @@ export class SubscriptionParser {
         return node;
       });
     }
+
     return processed;
   }
 }
 
+// 导出单例实例
 export const subscriptionParser = new SubscriptionParser();

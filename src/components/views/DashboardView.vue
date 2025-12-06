@@ -743,46 +743,6 @@ const handleSaveSortChanges = async () => {
   }
 };
 
-const handleSettingsModalChange = (val: boolean) => {
-  if (!val) {
-    window.location.reload();
-  }
-};
-
-// 导出节点功能
-const handleExportNodes = async () => {
-  // 优先尝试使用手动节点订阅Token导出链接
-  const token = config.value?.manualNodeToken;
-  if (token && token.trim()) {
-    const url = `${window.location.origin}/${token}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast('手动节点订阅链接已复制到剪贴板', 'success');
-    } catch (error) {
-      console.error('复制失败:', error);
-      showToast('复制失败，请重试', 'error');
-    }
-    return;
-  }
-
-  // 如果未配置Token，则导出Base64内容
-  const enabledNodes = manualNodes.value.filter(n => n.enabled && n.url);
-  if (enabledNodes.length === 0) {
-    showToast('没有可导出的启用节点', 'warning');
-    return;
-  }
-
-  try {
-    const urls = enabledNodes.map(n => n.url).join('\n');
-    const base64 = btoa(urls);
-    await navigator.clipboard.writeText(base64);
-    showToast(`已导出 ${enabledNodes.length} 个节点内容(Base64)。如需导出订阅链接，请在设置中配置"手动节点订阅Token"`, 'success');
-  } catch (error) {
-    console.error('导出失败:', error);
-    showToast('导出失败，请重试', 'error');
-  }
-};
-
 const handleSubscriptionDragEnd = async () => {
   // vuedraggable 已经自动更新了 subscriptions 数组
   hasUnsavedSortChanges.value = true;
@@ -874,7 +834,7 @@ const handleNodeDragEnd = async () => {
         :has-unsaved-sort-changes="hasUnsavedSortChanges" @add-node="handleAddNode"
         @bulk-import="showBulkImportModal = true" @save-sort="handleSaveSortChanges"
         @toggle-sort="handleToggleSortNodes" @import-subs="showSubscriptionImportModal = true"
-        @auto-sort="handleAutoSortNodes" @deduplicate="handleDeduplicateNodes" @export-nodes="handleExportNodes"
+        @auto-sort="handleAutoSortNodes" @deduplicate="handleDeduplicateNodes"
         @delete-all-nodes="showDeleteNodesModal = true" @batch-delete-nodes="handleBatchDeleteNodes"
         @drag-end="handleNodeDragEnd" @edit-node="handleEditNode" @delete-node="handleDeleteNodeWithCleanup"
         @change-page="changeManualNodesPage" />
@@ -985,7 +945,7 @@ const handleNodeDragEnd = async () => {
     </template>
   </Modal>
 
-  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" @update:show="handleSettingsModalChange" />
+  <SettingsModal v-model:show="uiStore.isSettingsModalVisible" />
   <SubscriptionImportModal :show="showSubscriptionImportModal" @update:show="showSubscriptionImportModal = $event"
     :add-nodes-from-bulk="addNodesFromBulk"
     :on-import-success="async () => { await handleDirectSave('导入订阅'); triggerDataUpdate(); }" />

@@ -173,6 +173,8 @@ export interface ProxyNode {
     'recv-window'?: number; // 接收窗口
     'recv-window-conn'?: number; // 连接接收窗口
     'disable-mtu-discovery'?: boolean; // 禁用MTU发现
+    'hop-interval'?: string | number; // 端口跳跃间隔 (Hysteria2)
+    'heartbeat-interval'?: number; // 心跳间隔 (TUIC)
 
     // === TUIC 特有 ===
     token?: string; // TUIC token

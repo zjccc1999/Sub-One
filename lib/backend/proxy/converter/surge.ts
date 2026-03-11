@@ -102,8 +102,9 @@ export class SurgeConverter extends BaseConverter {
         return result.toString();
     }
 
-    private trojan(proxy: ProxyNode): string {
-        const result = new Result(proxy);
+    private trojan(proxy: ProxyNode): string {        if (proxy['reality-opts']) {
+            throw new Error('[SurgeConverter] Surge does not support Trojan with reality');
+        }        const result = new Result(proxy);
         result.append(
             `${proxy.name}=trojan,${proxy.server},${proxy.port},password=\"${proxy.password}\"`
         );
@@ -124,7 +125,7 @@ export class SurgeConverter extends BaseConverter {
     }
 
     private vless(_proxy: ProxyNode): string {
-        return '';
+        throw new Error('[SurgeConverter] Surge does not support VLESS proxy type');
     }
 
     private http(proxy: ProxyNode): string {

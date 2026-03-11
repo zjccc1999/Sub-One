@@ -135,7 +135,12 @@ export class LoonConverter extends BaseConverter {
             'skip-cert-verify'
         );
         result.appendIfPresent(`,tls-name=${proxy.sni}`, 'sni');
-        result.append(`,alterId=${proxy.aead ? 0 : proxy.alterId || 0}`);
+        // aead 字段存在时: true→alterId=0 (AEAD开启), false→alterId=1; 不存在时直接用 alterId
+        if (proxy.aead !== undefined) {
+            result.append(`,alterId=${proxy.aead ? 0 : 1}`);
+        } else {
+            result.append(`,alterId=${proxy.alterId ?? 0}`);
+        }
         this.appendCommon(result, proxy);
         return result.toString();
     }
@@ -207,7 +212,22 @@ export class LoonConverter extends BaseConverter {
             'private-key'
         );
         result.appendIfPresent(`,mtu=${proxy.mtu}`, 'mtu');
-        result.appendIfPresent(`,dns=${proxy.dns}`, 'dns');
+        // DNS: 区分 IPv4 (dns=) 和 IPv6 (dnsv6=)
+        if (proxy.dns) {
+            let dns: string | undefined;
+            let dnsv6: string | undefined;
+            if (Array.isArray(proxy.dns)) {
+                const isIPv4 = (ip: string) => /^\d+\.\d+\.\d+\.\d+$/.test(ip);
+                const isIPv6 = (ip: string) => /^[\da-fA-F:]+$/.test(ip) && ip.includes(':');
+                dnsv6 = proxy.dns.find(isIPv6);
+                dns = proxy.dns.find(isIPv4);
+                if (!dns) dns = proxy.dns.find((i: string) => !isIPv4(i) && !isIPv6(i));
+            } else {
+                dns = String(proxy.dns);
+            }
+            if (dns) result.append(`,dns=${dns}`);
+            if (dnsv6) result.append(`,dnsv6=${dnsv6}`);
+        }
         result.appendIfPresent(
             `,keepalive=${proxy.keepalive || proxy['persistent-keepalive']}`,
             'keepalive'

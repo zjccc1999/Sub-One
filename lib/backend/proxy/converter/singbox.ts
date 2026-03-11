@@ -9,8 +9,12 @@ export class SingboxConverter extends BaseConverter {
     name = 'Singbox';
 
     async convert(nodes: ProxyNode[], _options: ConvertOptions = {}): Promise<string> {
-        const outbounds = nodes.map((node) => this.toOutbound(node)).filter(Boolean);
-        return JSON.stringify(outbounds, null, 2);
+        const outbounds = nodes.flatMap((node) => {
+            const result = this.toOutbound(node);
+            if (!result) return [];
+            return Array.isArray(result) ? result : [result];
+        });
+        return JSON.stringify({ outbounds }, null, 2);
     }
 
     private toOutbound(node: ProxyNode): any {
@@ -27,8 +31,9 @@ export class SingboxConverter extends BaseConverter {
                 hysteria2: 'hysteria2',
                 tuic: 'tuic',
                 wireguard: 'wireguard',
+                ssh: 'ssh',
                 anytls: 'anytls',
-                naive: 'http', // naive maps to http with certain opts usually
+                naive: 'http',
                 direct: 'direct',
                 reject: 'block'
             };
@@ -54,9 +59,46 @@ export class SingboxConverter extends BaseConverter {
                         outbound.plugin = 'obfs';
                         outbound.plugin_opts = `mode=${node['plugin-opts']?.mode || 'http'}${node['plugin-opts']?.host ? ';host=' + node['plugin-opts'].host : ''}`;
                     } else if (node.plugin === 'shadow-tls') {
-                        outbound.plugin = 'shadow-tls';
-                        outbound.plugin_opts = `host=${node['plugin-opts']?.host};password=${node['plugin-opts']?.password};version=${node['plugin-opts']?.version || 3}`;
+                        // shadow-tls: 拆分为 shadowsocks + shadowtls 两个 outbound
+                        const opts = (node['plugin-opts'] || {}) as any;
+                        const stTag = `${node.name}_shadowtls`;
+                        outbound.detour = stTag;
+                        if (node['udp-over-tcp']) outbound.udp_over_tcp = { enabled: true, version: node['udp-over-tcp-version'] === 2 ? 2 : 1 };
+                        const stOutbound: any = {
+                            type: 'shadowtls',
+                            tag: stTag,
+                            server: node.server,
+                            server_port: node.port,
+                            version: opts.version || 3,
+                            password: opts.password,
+                            tls: {
+                                enabled: true,
+                                server_name: opts.host,
+                                utls: { enabled: true, fingerprint: node['client-fingerprint'] || 'chrome' }
+                            }
+                        };
+                        // 返回数组：SS 本体在前，shadowtls 在后
+                        // (通过在 convert() 的 flatMap 展开)
+                        (outbound as any).__extra = stOutbound;
                     }
+                    break;
+                case 'ssh':
+                    if (node.username) outbound.user = node.username;
+                    if (node.password) outbound.password = node.password;
+                    if (node['private-key'] || node.privateKey)
+                        outbound.private_key_path = node['private-key'] || node.privateKey;
+                    if (node['private-key-passphrase'])
+                        outbound.private_key_passphrase = node['private-key-passphrase'];
+                    if (node['server-fingerprint']) {
+                        outbound.host_key = [node['server-fingerprint']];
+                        outbound.host_key_algorithms = [node['server-fingerprint'].split(' ')[0]];
+                    }
+                    if (node['host-key']) outbound.host_key = node['host-key'];
+                    if (node['host-key-algorithms']) outbound.host_key_algorithms = node['host-key-algorithms'];
+                    delete outbound.server;
+                    delete outbound.server_port;
+                    outbound.server = node.server;
+                    outbound.server_port = node.port;
                     break;
                 case 'vmess':
                     outbound.uuid = node.uuid;
@@ -103,27 +145,80 @@ export class SingboxConverter extends BaseConverter {
                             type: 'salamander',
                             password: node['obfs-password'] || node.obfs
                         };
+                    // 端口跳跃
+                    if (node.ports) {
+                        outbound.server_ports = String(node.ports)
+                            .split(/\s*,\s*/)
+                            .map((p) => {
+                                const range = p.replace(/\s*-\s*/g, ':');
+                                return range.includes(':') ? range : `${range}:${range}`;
+                            });
+                    }
+                    if (node['hop-interval']) {
+                        const hi = String(node['hop-interval']);
+                        outbound.hop_interval = /^\d+$/.test(hi) ? `${hi}s` : hi;
+                    }
                     this.appendTLS(outbound, node);
                     break;
                 case 'tuic':
                     outbound.uuid = node.uuid;
                     outbound.password = node.password;
-                    outbound.congestion_control = node['congestion-controller'] || 'cubic';
-                    outbound.udp_relay_mode = node['udp-relay-mode'] || 'quic';
-                    outbound.zero_rtt_handshake = !!node['reduce-rtt'];
+                    if (node['congestion-controller'] && node['congestion-controller'] !== 'cubic')
+                        outbound.congestion_control = node['congestion-controller'];
+                    if (node['udp-relay-mode'] && node['udp-relay-mode'] !== 'native')
+                        outbound.udp_relay_mode = node['udp-relay-mode'];
+                    if (node['reduce-rtt']) outbound.zero_rtt_handshake = true;
+                    if (node['heartbeat-interval'])
+                        outbound.heartbeat = `${node['heartbeat-interval']}ms`;
                     this.appendTLS(outbound, node);
                     break;
-                case 'wireguard':
-                    outbound.local_address = Array.isArray(node.ip)
-                        ? node.ip
-                        : [node.ip].filter(Boolean);
-                    if (node.ipv6) outbound.local_address.push(node.ipv6);
+                case 'wireguard': {
+                    const localAddr: string[] = [];
+                    if (node.ip) {
+                        localAddr.push(/\//.test(node.ip) ? node.ip : `${node.ip}/32`);
+                    }
+                    if (node.ipv6) {
+                        localAddr.push(/\//.test(node.ipv6) ? node.ipv6 : `${node.ipv6}/128`);
+                    }
+                    outbound.local_address = localAddr;
                     outbound.private_key = node['private-key'] || node.privateKey;
-                    outbound.peer_public_key = node['public-key'] || node.publicKey;
-                    outbound.pre_shared_key = node['pre-shared-key'] || node['preshared-key'];
-                    outbound.mtu = node.mtu || 1420;
-                    outbound.reserved = node.reserved;
+                    // reserved 字段处理
+                    if (typeof node.reserved === 'string') {
+                        outbound.reserved = node.reserved;
+                    } else if (Array.isArray(node.reserved)) {
+                        outbound.reserved = [...node.reserved];
+                    }
+                    // mtu
+                    if (node.mtu) outbound.mtu = node.mtu;
+                    // 多 peers 结构
+                    const wgPeers = node.peers;
+                    if (wgPeers && wgPeers.length > 0) {
+                        outbound.peers = wgPeers.map((p: any) => {
+                            const peer: any = {
+                                server: p.server || (p.endpoint ? p.endpoint.split(':')[0] : node.server),
+                                server_port: parseInt(
+                                    String(p.port || (p.endpoint ? p.endpoint.split(':')[1] : node.port)),
+                                    10
+                                ),
+                                public_key: p['public-key'],
+                                allowed_ips: p['allowed-ips'] || p.allowed_ips || ['0.0.0.0/0', '::/0']
+                            };
+                            if (typeof p.reserved === 'string') {
+                                peer.reserved = [p.reserved];
+                            } else if (Array.isArray(p.reserved)) {
+                                peer.reserved = [...p.reserved];
+                            }
+                            if (p['pre-shared-key']) peer.pre_shared_key = p['pre-shared-key'];
+                            return peer;
+                        });
+                    } else {
+                        // 单 peer 简化结构
+                        outbound.peer_public_key = node['public-key'] || node.publicKey;
+                        if (node['pre-shared-key'] || node['preshared-key'])
+                            outbound.pre_shared_key = node['pre-shared-key'] || node['preshared-key'];
+                    }
                     break;
+                }
                 case 'anytls':
                     outbound.password = node.password;
                     // session 相关参数
@@ -140,7 +235,14 @@ export class SingboxConverter extends BaseConverter {
             // Common opts
             if (node.tfo) outbound.tcp_fast_open = true;
             if (node['underlying-proxy'] || node['dialer-proxy'])
-                outbound.detour = node['underlying-proxy'] || node['dialer-proxy'];
+                outbound.detour = outbound.detour || node['underlying-proxy'] || node['dialer-proxy'];
+
+            // shadow-tls 双 outbound 拆分
+            if ((outbound as any).__extra) {
+                const extra = (outbound as any).__extra;
+                delete (outbound as any).__extra;
+                return [outbound, extra];
+            }
 
             return outbound;
         } catch (e) {

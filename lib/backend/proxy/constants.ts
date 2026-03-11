@@ -282,6 +282,7 @@ export const PLATFORM_PROTOCOL_SUPPORT: Record<string, string[]> = {
         'hysteria2',
         'tuic',
         'wireguard',
+        'ssh',
         'socks5',
         'http',
         'anytls'

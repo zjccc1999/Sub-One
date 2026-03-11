@@ -55,10 +55,10 @@ describe('Real Subscription AnyTLS Validation', () => {
     const nodes = parse(REAL_URIS[0]);
     const r = await convert(nodes, 'singbox');
     const parsed = JSON.parse(r);
-    expect(parsed[0].type).toBe('anytls');
-    expect(parsed[0].password).toBe('72f8ffe2-e377-466f-8e0d-3b9af6c49a4f');
-    expect(parsed[0].tls.server_name).toBe('usall.9966663.xyz');
-    console.log('[Singbox]', JSON.stringify(parsed[0], null, 2));
+    expect(parsed.outbounds[0].type).toBe('anytls');
+    expect(parsed.outbounds[0].password).toBe('72f8ffe2-e377-466f-8e0d-3b9af6c49a4f');
+    expect(parsed.outbounds[0].tls.server_name).toBe('usall.9966663.xyz');
+    console.log('[Singbox]', JSON.stringify(parsed.outbounds[0], null, 2));
   });
 
   it('should roundtrip: parse then re-encode to URI', async () => {
